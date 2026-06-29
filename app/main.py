@@ -116,6 +116,76 @@ def enrich_t(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
     return item
 
 
+def t_record_sort_ts(item: dict[str, Any]) -> float:
+    sold_at = item.get("sold_at")
+    if sold_at and isinstance(sold_at, str):
+        if len(sold_at) == 10 and sold_at[4] == "-":
+            try:
+                return datetime.strptime(sold_at, "%Y-%m-%d").timestamp()
+            except ValueError:
+                pass
+        if len(sold_at) == 4 and sold_at.isdigit():
+            try:
+                year = datetime.utcnow().year
+                return datetime.strptime(f"{year}{sold_at}", "%Y%m%d").timestamp()
+            except ValueError:
+                pass
+    for field in ("updated_at", "created_at"):
+        val = item.get(field)
+        if val and isinstance(val, str):
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
+    return 0.0
+
+
+def sort_t_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda r: (
+            1 if r.get("status") == "CLOSED" else 0,
+            -t_record_sort_ts(r),
+            str(r.get("id", "")),
+        ),
+    )
+
+
+def ing_record_sort_ts(item: dict[str, Any]) -> float:
+    date = item.get("date")
+    if date and isinstance(date, str):
+        if len(date) == 10 and date[4] == "-":
+            try:
+                return datetime.strptime(date, "%Y-%m-%d").timestamp()
+            except ValueError:
+                pass
+        if len(date) == 4 and date.isdigit():
+            try:
+                year = datetime.utcnow().year
+                return datetime.strptime(f"{year}{date}", "%Y%m%d").timestamp()
+            except ValueError:
+                pass
+    for field in ("updated_at", "created_at"):
+        val = item.get(field)
+        if val and isinstance(val, str):
+            try:
+                return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                pass
+    return 0.0
+
+
+def sort_ing_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        rows,
+        key=lambda r: (
+            1 if r.get("allocation_status") == "FULLY_ALLOCATED" else 0,
+            -ing_record_sort_ts(r),
+            str(r.get("id", "")),
+        ),
+    )
+
+
 def enrich_ing(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
     item = serialize(doc) or {}
     count = float(item["count"])
@@ -281,9 +351,9 @@ def list_t_records(uid: ObjectId = Depends(user_id)):
     allocations = db.ing_allocations
     rows = [
         enrich_t(doc, allocations)
-        for doc in db.t_records.find({"user_id": uid}).sort("_id", -1)
+        for doc in db.t_records.find({"user_id": uid})
     ]
-    return rows
+    return sort_t_records(rows)
 
 
 @app.post("/api/t-records", status_code=201)
@@ -354,9 +424,9 @@ def list_ing_records(uid: ObjectId = Depends(user_id)):
     allocations = db.ing_allocations
     rows = [
         enrich_ing(doc, allocations)
-        for doc in db.ing_records.find({"user_id": uid}).sort("_id", -1)
+        for doc in db.ing_records.find({"user_id": uid})
     ]
-    return rows
+    return sort_ing_records(rows)
 
 
 @app.post("/api/ing-records", status_code=201)
