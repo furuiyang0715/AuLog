@@ -204,6 +204,15 @@ function renderSelled() {
     </table>`;
 }
 
+function targetMark(a) {
+  if (a.target_type === "T_MATCH") {
+    const t = tRecords.find((r) => r.id === a.target_id);
+    return t?.mark || "—";
+  }
+  const s = selledRecords.find((r) => r.id === a.target_id);
+  return s?.mark || "—";
+}
+
 function renderAlloc() {
   const el = document.getElementById("list-alloc");
   if (!allocations.length) {
@@ -225,8 +234,8 @@ function renderAlloc() {
             return `
           <tr>
             <td>${typeLabel}</td>
-            <td>${esc(ing?.mark || a.ing_id.slice(-6))}</td>
-            <td>${a.target_id.slice(-6)}</td>
+            <td>${esc(ing?.mark || "—")}</td>
+            <td>${esc(targetMark(a))}</td>
             <td>${fmt(a.count)}</td>
             <td>${fmt(a.amount)}</td>
             <td><button class="btn-sm danger" onclick="deleteAlloc('${a.id}')">撤销</button></td>
