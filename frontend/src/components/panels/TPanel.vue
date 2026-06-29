@@ -1,5 +1,5 @@
 <script setup>
-import { h, inject, ref } from "vue";
+import { computed, h, inject, ref } from "vue";
 import {
   NButton,
   NCard,
@@ -24,6 +24,12 @@ const message = useMessage();
 const dialog = useDialog();
 const { pagination, watchDataLength } = usePagination(10);
 watchDataLength(ledger.tRecords);
+
+const closedGainTotal = computed(() =>
+  ledger.tRecords.value
+    .filter((r) => r.status === "CLOSED")
+    .reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
+);
 
 const form = ref({
   mark: "",
@@ -196,6 +202,18 @@ function onDelete(id) {
     </NForm>
   </NCard>
 
+  <NCard :bordered="false" class="section-card summary-card">
+    <div class="summary-row">
+      <div>
+        <div class="summary-label">已闭环套利合计</div>
+        <div class="hint-text">仅统计状态为「已闭环」的 gain 之和</div>
+      </div>
+      <div class="summary-value" :class="gainType(closedGainTotal) === 'success' ? 'gain-positive' : gainType(closedGainTotal) === 'error' ? 'gain-negative' : ''">
+        {{ fmt(closedGainTotal) }}
+      </div>
+    </div>
+  </NCard>
+
   <NCard title="倒 T 列表" :bordered="false" class="section-card">
     <NDataTable
       :columns="columns"
@@ -251,6 +269,29 @@ function onDelete(id) {
 
 .full-width {
   width: 100%;
+}
+
+.summary-card {
+  background: linear-gradient(135deg, rgba(212, 168, 83, 0.08) 0%, rgba(26, 29, 35, 0.6) 100%);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.summary-label {
+  font-size: 0.95rem;
+  color: #d4a853;
+  font-weight: 600;
+}
+
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
