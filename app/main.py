@@ -557,7 +557,19 @@ def allocate_to_t(body: TMatchAllocation, uid: ObjectId = Depends(user_id)):
     if body.count > t_remaining + 1e-9:
         raise HTTPException(status_code=400, detail=f"倒T 剩余可配对克数不足，仅剩 {t_remaining} 克")
 
-    amount = round2(body.count * float(ing["price"]))
+    t_count = float(t_doc["count"])
+    t_sell_price = float(t_doc["pop_amount"]) / t_count if t_count else 0
+    ing_buy_price = float(ing["price"])
+    if t_sell_price + 1e-9 < ing_buy_price:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"倒T 卖价 {round2(t_sell_price)} 低于进货价 {round2(ing_buy_price)}，"
+                "不接受亏损配对"
+            ),
+        )
+
+    amount = round2(body.count * ing_buy_price)
     alloc = {
         "user_id": uid,
         "ing_id": ing["_id"],

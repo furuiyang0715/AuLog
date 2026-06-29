@@ -38,13 +38,16 @@ const showMatch = ref(false);
 const matchForm = ref({ t_id: null, count: null });
 const selectedIng = ref(null);
 
-const tOptions = () =>
-  ledger.tRecords.value
-    .filter((t) => t.remaining_count > 0)
+const tOptionsForIng = (ing) => {
+  if (!ing) return [];
+  const buyPrice = Number(ing.price);
+  return ledger.tRecords.value
+    .filter((t) => t.remaining_count > 0 && Number(t.price) + 1e-9 >= buyPrice)
     .map((t) => ({
       label: `${t.mark || "无备注"} · 剩余 ${fmt(t.remaining_count)} 克 · 卖价 ${fmt(t.price)}`,
       value: t.id,
     }));
+};
 
 function hStatus(status) {
   const meta = statusMap[status] || { label: status, type: "default" };
@@ -134,15 +137,19 @@ async function submit() {
 }
 
 function openMatch(ing) {
-  const options = tOptions();
+  const options = tOptionsForIng(ing);
   if (!options.length) {
-    message.warning("没有可配对的倒 T 记录");
+    message.warning("没有卖价不低于进货价的可配对倒 T");
     return;
   }
   selectedIng.value = ing;
   matchForm.value = {
     t_id: options[0].value,
-    count: Math.min(ing.remaining_count, ledger.tRecords.value.find((t) => t.id === options[0].value)?.remaining_count || ing.remaining_count),
+    count: Math.min(
+      ing.remaining_count,
+      ledger.tRecords.value.find((t) => t.id === options[0].value)?.remaining_count ||
+        ing.remaining_count
+    ),
   };
   showMatch.value = true;
 }
@@ -333,7 +340,7 @@ function onDelete(id) {
     </p>
     <NForm @submit.prevent="submitMatch">
       <NFormItem label="选择倒 T 记录">
-        <NSelect v-model:value="matchForm.t_id" :options="tOptions()" />
+        <NSelect v-model:value="matchForm.t_id" :options="tOptionsForIng(selectedIng)" />
       </NFormItem>
       <NFormItem label="配对克数">
         <NInputNumber v-model:value="matchForm.count" :min="0.01" :precision="2" class="full-width" />
