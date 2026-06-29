@@ -509,13 +509,33 @@ def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
 
 
 # ---------------------------------------------------------------------------
-# Static frontend
+# Static frontend (Vue build in static/dist)
 # ---------------------------------------------------------------------------
 
-static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
+root_dir = os.path.dirname(os.path.dirname(__file__))
+static_dir = os.path.join(root_dir, "static")
+dist_dir = os.path.join(static_dir, "dist")
+assets_dir = os.path.join(dist_dir, "assets")
 
+if os.path.isdir(dist_dir):
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-@app.get("/")
-def index():
-    return FileResponse(os.path.join(static_dir, "index.html"))
+    @app.get("/")
+    def index():
+        index_path = os.path.join(dist_dir, "index.html")
+        if not os.path.isfile(index_path):
+            raise HTTPException(status_code=404, detail="前端未构建，请运行 cd frontend && npm run build")
+        return FileResponse(index_path)
+else:
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+    @app.get("/")
+    def index():
+        legacy_index = os.path.join(static_dir, "index.html")
+        if os.path.isfile(legacy_index):
+            return FileResponse(legacy_index)
+        raise HTTPException(
+            status_code=404,
+            detail="前端未构建，请运行 cd frontend && npm install && npm run build",
+        )

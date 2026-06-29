@@ -53,7 +53,12 @@
         <label><span class="label-text">备注 mark</span><input name="mark" placeholder="卖了什么" /></label>
         <label><span class="label-text">克数 count</span><input name="count" type="number" step="0.01" min="0.01" required /></label>
         <label><span class="label-text">回笼金额 pop_amount</span><input name="pop_amount" type="number" step="0.01" min="0.01" required /></label>
-        <label><span class="label-text">卖出日期</span><input name="sold_at" placeholder="如 0622" /></label>
+        <label><span class="label-text">卖出日期</span>
+          <div class="date-picker">
+            <input type="hidden" name="sold_at" />
+            <button type="button" class="date-picker-btn"><span class="date-picker-text">选择日期</span></button>
+          </div>
+        </label>
         <button type="submit">添加</button>
       </form>
       <div class="card">
@@ -68,7 +73,12 @@
         <div class="form-header">
           <h2>新建进货记录</h2>
         </div>
-        <label><span class="label-text">日期 date</span><input name="date" placeholder="如 0622" required /></label>
+        <label><span class="label-text">日期 date</span>
+          <div class="date-picker" data-required>
+            <input type="hidden" name="date" required />
+            <button type="button" class="date-picker-btn"><span class="date-picker-text">选择日期</span></button>
+          </div>
+        </label>
         <label><span class="label-text">备注 mark</span><input name="mark" placeholder="买了什么" /></label>
         <label><span class="label-text">单价 price</span><input name="price" type="number" step="0.01" min="0.01" required /></label>
         <label><span class="label-text">克数 count</span><input name="count" type="number" step="0.01" min="0.01" required /></label>
@@ -124,7 +134,12 @@
     <form method="dialog" id="form-selled-alloc" class="dialog-form">
       <h3>反弹卖出</h3>
       <p id="selled-ing-info" class="dialog-info"></p>
-      <label>日期<input name="date" required placeholder="如 0616" /></label>
+      <label>日期
+        <div class="date-picker" data-required>
+          <input type="hidden" name="date" required />
+          <button type="button" class="date-picker-btn"><span class="date-picker-text">选择日期</span></button>
+        </div>
+      </label>
       <label>备注 mark<input name="mark" /></label>
       <label>卖出克数<input name="count" type="number" step="0.01" min="0.01" required /></label>
       <label>卖出单价<input name="sell_price" type="number" step="0.01" min="0.01" required /></label>
@@ -136,6 +151,7 @@
   </dialog>
 
   <div id="toast" class="toast hidden"></div>
+  <script src="/static/datepicker.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -22,6 +22,31 @@ function fmt(n) {
   });
 }
 
+function formatDateDisplay(value) {
+  if (!value) return "—";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-");
+    return `${y}/${m}/${d}`;
+  }
+  return String(value);
+}
+
+function resetFormWithDates(form) {
+  form.reset();
+  if (window.DatePicker) DatePicker.resetForm(form);
+}
+
+function validateDatePickers(form) {
+  for (const picker of form.querySelectorAll(".date-picker[data-required]")) {
+    const hidden = picker.querySelector('input[type="hidden"]');
+    if (!hidden.value) {
+      showToast("请选择日期", true);
+      return false;
+    }
+  }
+  return true;
+}
+
 function showToast(msg, isError = false) {
   const el = document.getElementById("toast");
   el.textContent = msg;
@@ -148,6 +173,7 @@ document.getElementById("form-auth").addEventListener("submit", async (e) => {
 document.getElementById("btn-logout").addEventListener("click", () => logout());
 
 async function bootstrap() {
+  DatePicker.init();
   setAuthMode("login");
   if (!authToken) {
     setAuthUI(false);
@@ -250,7 +276,7 @@ function renderIng() {
             const canAct = r.remaining_count > 0;
             return `
           <tr>
-            <td>${esc(r.date)}</td>
+            <td>${esc(formatDateDisplay(r.date))}</td>
             <td>${esc(r.mark) || "—"}</td>
             <td>${fmt(r.price)}</td>
             <td>${fmt(r.count)}</td>
@@ -294,7 +320,7 @@ function renderSelled() {
           .map(
             (r) => `
           <tr>
-            <td>${esc(r.date)}</td>
+            <td>${esc(formatDateDisplay(r.date))}</td>
             <td>${esc(r.mark) || "—"}</td>
             <td>${fmt(r.buy_price)}</td>
             <td>${fmt(r.count)}</td>
@@ -378,7 +404,7 @@ document.getElementById("form-t").addEventListener("submit", async (e) => {
         sold_at: fd.get("sold_at") || null,
       }),
     });
-    e.target.reset();
+    resetFormWithDates(e.target);
     showToast("倒 T 记录已添加");
     await refreshAll();
   } catch (err) {
@@ -388,6 +414,7 @@ document.getElementById("form-t").addEventListener("submit", async (e) => {
 
 document.getElementById("form-ing").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!validateDatePickers(e.target)) return;
   const fd = new FormData(e.target);
   const amountRaw = fd.get("amount");
   try {
@@ -401,7 +428,7 @@ document.getElementById("form-ing").addEventListener("submit", async (e) => {
         amount: amountRaw ? Number(amountRaw) : null,
       }),
     });
-    e.target.reset();
+    resetFormWithDates(e.target);
     showToast("进货记录已添加");
     await refreshAll();
   } catch (err) {
@@ -451,7 +478,7 @@ function openSelled(ingId) {
     `${ing.mark || "无备注"} · 买入价 ${fmt(ing.price)} · 剩余 ${fmt(ing.remaining_count)} 克`;
 
   const form = document.getElementById("form-selled-alloc");
-  form.date.value = ing.date || "";
+  DatePicker.setValue(form.querySelector(".date-picker"), ing.date);
   form.mark.value = ing.mark || "";
   form.count.value = ing.remaining_count;
   form.sell_price.value = "";
@@ -489,6 +516,7 @@ document.getElementById("form-t-match").addEventListener("submit", async (e) => 
 
 document.getElementById("form-selled-alloc").addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!validateDatePickers(e.target)) return;
   const fd = new FormData(e.target);
   try {
     await api("/allocations/selled", {

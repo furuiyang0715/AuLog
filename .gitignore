@@ -6,3 +6,7 @@ venv/
 .DS_Store
 *.xlsx
 q.md
+
+# Frontend
+frontend/node_modules/
+static/dist/

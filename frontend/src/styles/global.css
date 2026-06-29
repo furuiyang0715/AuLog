@@ -1,0 +1,40 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  min-height: 100vh;
+}
+
+body {
+  background: #0f1114;
+}
+
+.page-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+}
+
+.gain-positive {
+  color: #5cb87a;
+}
+
+.gain-negative {
+  color: #e07070;
+}
+
+.hint-text {
+  color: #8b929e;
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem;
+}
+
+.form-actions {
+  grid-column: 1 / -1;
+}
