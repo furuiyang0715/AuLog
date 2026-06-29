@@ -65,9 +65,14 @@ const columns = [
   {
     title: "操作",
     key: "actions",
-    width: 220,
+    width: 260,
     render: (r) =>
       h("div", { class: "actions" }, [
+        h(
+          NButton,
+          { size: "small", quaternary: true, type: "primary", onClick: () => openEdit(r) },
+          { default: () => "编辑" }
+        ),
         r.remaining_count > 0
           ? h(
               NButton,
@@ -93,6 +98,17 @@ const columns = [
 
 const showSelled = ref(false);
 const selledForm = ref({ date: null, mark: "", count: null, sell_price: null });
+
+const showEdit = ref(false);
+const editingId = ref(null);
+const editForm = ref({
+  date: null,
+  mark: "",
+  price: null,
+  count: null,
+  amount: null,
+  allocated_count: 0,
+});
 
 async function submit() {
   if (!form.value.date || !form.value.price || !form.value.count) {
@@ -137,6 +153,43 @@ function openSelled(ing) {
     sell_price: null,
   };
   showSelled.value = true;
+}
+
+function openEdit(record) {
+  editingId.value = record.id;
+  editForm.value = {
+    date: parseLegacyDate(record.date),
+    mark: record.mark || "",
+    price: record.price,
+    count: record.count,
+    amount: record.amount,
+    allocated_count: record.allocated_count || 0,
+  };
+  showEdit.value = true;
+}
+
+async function submitEdit() {
+  if (!editForm.value.date || !editForm.value.price || !editForm.value.count) {
+    message.warning("请填写日期、单价和克数");
+    return;
+  }
+  if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
+    message.warning(`克数不能小于已分配克数 ${fmt(editForm.value.allocated_count)} 克`);
+    return;
+  }
+  try {
+    await ledger.updateIng(editingId.value, {
+      date: toDateString(editForm.value.date),
+      mark: editForm.value.mark,
+      price: editForm.value.price,
+      count: editForm.value.count,
+      amount: editForm.value.amount,
+    });
+    showEdit.value = false;
+    message.success("已保存");
+  } catch (err) {
+    message.error(err.message);
+  }
 }
 
 async function submitMatch() {
@@ -234,9 +287,41 @@ function onDelete(id) {
       :loading="ledger.loading.value"
       :bordered="false"
       size="small"
-      :scroll-x="1100"
+      :scroll-x="1180"
     />
   </NCard>
+
+  <NModal v-model:show="showEdit" preset="card" title="编辑进货记录" style="max-width: 520px">
+    <p v-if="editForm.allocated_count > 0" class="hint-text">
+      已分配 {{ fmt(editForm.allocated_count) }} 克，克数不能小于该值；修改单价会同步更新倒 T 配对的买回成本
+    </p>
+    <NForm @submit.prevent="submitEdit">
+      <NFormItem label="日期 date">
+        <NDatePicker v-model:value="editForm.date" type="date" class="full-width" :input-readonly="true" />
+      </NFormItem>
+      <NFormItem label="备注 mark">
+        <NInput v-model:value="editForm.mark" />
+      </NFormItem>
+      <NFormItem label="单价 price">
+        <NInputNumber v-model:value="editForm.price" :min="0.01" :precision="2" class="full-width" />
+      </NFormItem>
+      <NFormItem label="克数 count">
+        <NInputNumber
+          v-model:value="editForm.count"
+          :min="editForm.allocated_count || 0.01"
+          :precision="2"
+          class="full-width"
+        />
+      </NFormItem>
+      <NFormItem label="总价 amount">
+        <NInputNumber v-model:value="editForm.amount" :min="0" :precision="2" class="full-width" placeholder="留空按单价×克数" />
+      </NFormItem>
+      <div class="modal-actions">
+        <NButton @click="showEdit = false">取消</NButton>
+        <NButton type="primary" attr-type="submit">保存</NButton>
+      </div>
+    </NForm>
+  </NModal>
 
   <NModal v-model:show="showMatch" preset="card" title="配对倒 T" style="max-width: 460px">
     <p v-if="selectedIng" class="hint-text">

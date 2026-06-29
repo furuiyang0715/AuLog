@@ -302,6 +302,32 @@ def create_t_record(body: TCreate, uid: ObjectId = Depends(user_id)):
     return enrich_t(doc, db.ing_allocations)
 
 
+@app.patch("/api/t-records/{record_id}")
+def update_t_record(record_id: str, body: TCreate, uid: ObjectId = Depends(user_id)):
+    db = get_db()
+    doc = get_t_or_404(record_id, db.t_records, uid)
+    allocations = db.ing_allocations
+    allocated = t_allocated_count(doc["_id"], allocations)
+    new_count = round2(body.count)
+
+    if new_count + 1e-9 < allocated:
+        raise HTTPException(
+            status_code=400,
+            detail=f"克数不能小于已配对克数 {allocated} 克",
+        )
+
+    update = {
+        "mark": body.mark.strip(),
+        "count": new_count,
+        "pop_amount": round2(body.pop_amount),
+        "sold_at": body.sold_at,
+        "updated_at": datetime.utcnow(),
+    }
+    db.t_records.update_one({"_id": doc["_id"], "user_id": uid}, {"$set": update})
+    doc.update(update)
+    return enrich_t(doc, allocations)
+
+
 @app.delete("/api/t-records/{record_id}")
 def delete_t_record(record_id: str, uid: ObjectId = Depends(user_id)):
     db = get_db()
@@ -349,6 +375,40 @@ def create_ing_record(body: IngCreate, uid: ObjectId = Depends(user_id)):
     result = db.ing_records.insert_one(doc)
     doc["_id"] = result.inserted_id
     return enrich_ing(doc, db.ing_allocations)
+
+
+@app.patch("/api/ing-records/{record_id}")
+def update_ing_record(record_id: str, body: IngCreate, uid: ObjectId = Depends(user_id)):
+    db = get_db()
+    doc = get_ing_or_404(record_id, db.ing_records, uid)
+    allocations = db.ing_allocations
+    allocated = ing_allocated_count(doc["_id"], allocations)
+    new_count = round2(body.count)
+    new_price = round2(body.price)
+
+    if new_count + 1e-9 < allocated:
+        raise HTTPException(
+            status_code=400,
+            detail=f"克数不能小于已分配克数 {allocated} 克",
+        )
+
+    amount = round2(body.amount if body.amount is not None else new_price * new_count)
+    update = {
+        "date": body.date.strip(),
+        "mark": body.mark.strip(),
+        "price": new_price,
+        "count": new_count,
+        "amount": amount,
+        "updated_at": datetime.utcnow(),
+    }
+    db.ing_records.update_one({"_id": doc["_id"], "user_id": uid}, {"$set": update})
+
+    for alloc in allocations.find({"user_id": uid, "ing_id": doc["_id"], "target_type": "T_MATCH"}):
+        new_amount = round2(float(alloc["count"]) * new_price)
+        allocations.update_one({"_id": alloc["_id"]}, {"$set": {"amount": new_amount}})
+
+    doc.update(update)
+    return enrich_ing(doc, allocations)
 
 
 @app.delete("/api/ing-records/{record_id}")

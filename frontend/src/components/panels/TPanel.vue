@@ -11,11 +11,12 @@ import {
   NGridItem,
   NInput,
   NInputNumber,
+  NModal,
   NTag,
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, gainType, statusMap, toDateString } from "../../utils/format";
+import { fmt, gainType, parseLegacyDate, statusMap, toDateString } from "../../utils/format";
 
 const ledger = inject("ledger");
 const message = useMessage();
@@ -26,6 +27,16 @@ const form = ref({
   count: null,
   pop_amount: null,
   sold_at: null,
+});
+
+const showEdit = ref(false);
+const editingId = ref(null);
+const editForm = ref({
+  mark: "",
+  count: null,
+  pop_amount: null,
+  sold_at: null,
+  allocated_count: 0,
 });
 
 function hStatus(status) {
@@ -42,6 +53,21 @@ function renderGain(r) {
   );
 }
 
+function actionButtons(r) {
+  return h("div", { class: "actions" }, [
+    h(
+      NButton,
+      { size: "small", quaternary: true, type: "primary", onClick: () => openEdit(r) },
+      { default: () => "编辑" }
+    ),
+    h(
+      NButton,
+      { size: "small", quaternary: true, type: "error", onClick: () => onDelete(r.id) },
+      { default: () => "删除" }
+    ),
+  ]);
+}
+
 const columns = [
   { title: "备注", key: "mark", render: (r) => r.mark || "—" },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },
@@ -55,16 +81,7 @@ const columns = [
     render: (r) => `${fmt(r.allocated_count)} / ${fmt(r.remaining_count)}`,
   },
   { title: "状态", key: "status", render: (r) => hStatus(r.status) },
-  {
-    title: "操作",
-    key: "actions",
-    render: (r) =>
-      h(
-        NButton,
-        { size: "small", quaternary: true, type: "error", onClick: () => onDelete(r.id) },
-        { default: () => "删除" }
-      ),
-  },
+  { title: "操作", key: "actions", width: 120, render: actionButtons },
 ];
 
 async function submit() {
@@ -81,6 +98,41 @@ async function submit() {
     });
     form.value = { mark: "", count: null, pop_amount: null, sold_at: null };
     message.success("倒 T 记录已添加");
+  } catch (err) {
+    message.error(err.message);
+  }
+}
+
+function openEdit(record) {
+  editingId.value = record.id;
+  editForm.value = {
+    mark: record.mark || "",
+    count: record.count,
+    pop_amount: record.pop_amount,
+    sold_at: parseLegacyDate(record.sold_at),
+    allocated_count: record.allocated_count || 0,
+  };
+  showEdit.value = true;
+}
+
+async function submitEdit() {
+  if (!editForm.value.count || !editForm.value.pop_amount) {
+    message.warning("请填写克数和回笼金额");
+    return;
+  }
+  if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
+    message.warning(`克数不能小于已配对克数 ${fmt(editForm.value.allocated_count)} 克`);
+    return;
+  }
+  try {
+    await ledger.updateT(editingId.value, {
+      mark: editForm.value.mark,
+      count: editForm.value.count,
+      pop_amount: editForm.value.pop_amount,
+      sold_at: editForm.value.sold_at ? toDateString(editForm.value.sold_at) : null,
+    });
+    showEdit.value = false;
+    message.success("已保存");
   } catch (err) {
     message.error(err.message);
   }
@@ -148,9 +200,44 @@ function onDelete(id) {
       :loading="ledger.loading.value"
       :bordered="false"
       size="small"
-      :scroll-x="960"
+      :scroll-x="1020"
     />
   </NCard>
+
+  <NModal v-model:show="showEdit" preset="card" title="编辑倒 T 记录" style="max-width: 520px">
+    <p v-if="editForm.allocated_count > 0" class="hint-text">
+      已配对 {{ fmt(editForm.allocated_count) }} 克，克数不能小于该值
+    </p>
+    <NForm @submit.prevent="submitEdit">
+      <NFormItem label="备注 mark">
+        <NInput v-model:value="editForm.mark" />
+      </NFormItem>
+      <NFormItem label="克数 count">
+        <NInputNumber
+          v-model:value="editForm.count"
+          :min="editForm.allocated_count || 0.01"
+          :precision="2"
+          class="full-width"
+        />
+      </NFormItem>
+      <NFormItem label="回笼金额 pop_amount">
+        <NInputNumber v-model:value="editForm.pop_amount" :min="0.01" :precision="2" class="full-width" />
+      </NFormItem>
+      <NFormItem label="卖出日期">
+        <NDatePicker
+          v-model:value="editForm.sold_at"
+          type="date"
+          clearable
+          class="full-width"
+          :input-readonly="true"
+        />
+      </NFormItem>
+      <div class="modal-actions">
+        <NButton @click="showEdit = false">取消</NButton>
+        <NButton type="primary" attr-type="submit">保存</NButton>
+      </div>
+    </NForm>
+  </NModal>
 </template>
 
 <style scoped>
@@ -160,5 +247,18 @@ function onDelete(id) {
 
 .full-width {
   width: 100%;
+}
+
+.actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 </style>

@@ -36,6 +36,16 @@ export function useLedger() {
     await refreshAll();
   }
 
+  async function updateT(id, payload) {
+    await api(`/t-records/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    await refreshAll();
+  }
+
+  async function updateIng(id, payload) {
+    await api(`/ing-records/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+    await refreshAll();
+  }
+
   async function deleteT(id) {
     await api(`/t-records/${id}`, { method: "DELETE" });
     await refreshAll();
@@ -88,6 +98,8 @@ export function useLedger() {
     refreshAll,
     createT,
     createIng,
+    updateT,
+    updateIng,
     deleteT,
     deleteIng,
     deleteSelled,
