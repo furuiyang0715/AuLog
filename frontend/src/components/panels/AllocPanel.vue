@@ -2,10 +2,13 @@
 import { h, inject } from "vue";
 import { NButton, NCard, NDataTable, useDialog, useMessage } from "naive-ui";
 import { fmt } from "../../utils/format";
+import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
+const { pagination, watchDataLength } = usePagination(10);
+watchDataLength(ledger.allocations);
 
 const columns = [
   {
@@ -65,6 +68,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :scroll-x="760"
+      :pagination="pagination"
     />
   </NCard>
 </template>

@@ -18,10 +18,13 @@ import {
   useMessage,
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString } from "../../utils/format";
+import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
+const { pagination, watchDataLength } = usePagination(10);
+watchDataLength(ledger.ingRecords);
 
 const form = ref({
   date: null,
@@ -288,6 +291,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :scroll-x="1180"
+      :pagination="pagination"
     />
   </NCard>
 

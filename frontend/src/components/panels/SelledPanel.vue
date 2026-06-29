@@ -2,10 +2,13 @@
 import { h, inject } from "vue";
 import { NButton, NCard, NDataTable, useDialog, useMessage } from "naive-ui";
 import { fmt, formatDateDisplay, gainType } from "../../utils/format";
+import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
+const { pagination, watchDataLength } = usePagination(10);
+watchDataLength(ledger.selledRecords);
 
 const columns = [
   { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
@@ -70,6 +73,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :scroll-x="900"
+      :pagination="pagination"
     />
   </NCard>
 </template>
