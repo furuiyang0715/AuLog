@@ -106,11 +106,49 @@ body {
   color: var(--gold);
 }
 
+.form-header {
+  grid-column: 1 / -1;
+}
+
+.form-header h2 {
+  margin-bottom: 0.5rem;
+}
+
+.form-header .hint {
+  margin: 0;
+}
+
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.75rem;
-  align-items: end;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: stretch;
+}
+
+.form-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 0;
+  height: 100%;
+}
+
+.form-grid .label-text {
+  display: block;
+  min-height: 2.5rem;
+  line-height: 1.25rem;
+  white-space: normal;
+  overflow: hidden;
+}
+
+.form-grid label input,
+.form-grid label select {
+  margin-top: auto;
+  width: 100%;
+  height: 2.5rem;
+  box-sizing: border-box;
 }
 
 label {
@@ -119,6 +157,7 @@ label {
   gap: 0.35rem;
   font-size: 0.8rem;
   color: var(--muted);
+  min-width: 0;
 }
 
 input,

@@ -303,28 +303,6 @@ document.getElementById("form-ing").addEventListener("submit", async (e) => {
   }
 });
 
-document.getElementById("form-selled").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  try {
-    await api("/selled-records", {
-      method: "POST",
-      body: JSON.stringify({
-        date: fd.get("date"),
-        mark: fd.get("mark"),
-        buy_price: Number(fd.get("buy_price")),
-        count: Number(fd.get("count")),
-        sell_price: Number(fd.get("sell_price")),
-      }),
-    });
-    e.target.reset();
-    showToast("反弹记录已添加");
-    await refreshAll();
-  } catch (err) {
-    showToast(err.message, true);
-  }
-});
-
 // ---------------------------------------------------------------------------
 // Allocation dialogs
 // ---------------------------------------------------------------------------

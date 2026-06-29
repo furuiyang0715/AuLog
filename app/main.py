@@ -182,16 +182,6 @@ class IngCreate(BaseModel):
     amount: Optional[float] = None
 
 
-class SelledCreate(BaseModel):
-    date: str
-    mark: str = ""
-    buy_price: float = Field(gt=0)
-    count: float = Field(gt=0)
-    buy_amount: Optional[float] = None
-    sell_price: float = Field(gt=0)
-    sell_amount: Optional[float] = None
-
-
 class TMatchAllocation(BaseModel):
     ing_id: str
     t_id: str
@@ -300,32 +290,6 @@ def list_selled_records():
     db = get_db()
     rows = [enrich_selled(doc) for doc in db.selled_records.find().sort("_id", -1)]
     return rows
-
-
-@app.post("/api/selled-records", status_code=201)
-def create_selled_record(body: SelledCreate):
-    db = get_db()
-    buy_amount = round2(
-        body.buy_amount if body.buy_amount is not None else body.buy_price * body.count
-    )
-    sell_amount = round2(
-        body.sell_amount
-        if body.sell_amount is not None
-        else body.sell_price * body.count
-    )
-    doc = {
-        "date": body.date.strip(),
-        "mark": body.mark.strip(),
-        "buy_price": round2(body.buy_price),
-        "count": round2(body.count),
-        "buy_amount": buy_amount,
-        "sell_price": round2(body.sell_price),
-        "sell_amount": sell_amount,
-        "created_at": datetime.utcnow(),
-    }
-    result = db.selled_records.insert_one(doc)
-    doc["_id"] = result.inserted_id
-    return enrich_selled(doc)
 
 
 @app.delete("/api/selled-records/{record_id}")
