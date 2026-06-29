@@ -9,11 +9,33 @@
 <body>
   <header class="header">
     <div class="header-inner">
-      <h1>AuLog</h1>
-      <p class="subtitle">实物金倒 T 账本 · 最简版</p>
+      <div>
+        <h1>AuLog</h1>
+        <p class="subtitle">实物金倒 T 账本</p>
+      </div>
+      <div id="user-bar" class="user-bar hidden">
+        <span id="current-username"></span>
+        <button type="button" class="btn-sm" id="btn-logout">退出</button>
+      </div>
     </div>
   </header>
 
+  <div id="auth-screen" class="auth-screen">
+    <div class="card auth-card">
+      <h2 id="auth-title">登录</h2>
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab active" data-mode="login">登录</button>
+        <button type="button" class="auth-tab" data-mode="register">注册</button>
+      </div>
+      <form id="form-auth" class="auth-form">
+        <label><span class="label-text">用户名</span><input name="username" required minlength="3" maxlength="32" autocomplete="username" /></label>
+        <label><span class="label-text">密码</span><input name="password" type="password" required minlength="6" autocomplete="current-password" /></label>
+        <button type="submit" id="auth-submit">登录</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="app-shell" class="hidden">
   <nav class="tabs">
     <button class="tab active" data-tab="t">倒 T</button>
     <button class="tab" data-tab="ing">进货 ing</button>
@@ -79,6 +101,7 @@
       </div>
     </section>
   </main>
+  </div>
 
   <!-- 配对倒 T 弹窗 -->
   <dialog id="dialog-t-match">

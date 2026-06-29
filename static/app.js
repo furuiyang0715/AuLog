@@ -1,10 +1,14 @@
 const API = "/api";
+const TOKEN_KEY = "aulog_token";
 
+let authToken = localStorage.getItem(TOKEN_KEY) || "";
+let currentUser = null;
 let tRecords = [];
 let ingRecords = [];
 let selledRecords = [];
 let allocations = [];
 let selectedIngId = null;
+let authMode = "login";
 
 // ---------------------------------------------------------------------------
 // Utils
@@ -27,16 +31,71 @@ function showToast(msg, isError = false) {
   showToast._timer = setTimeout(() => el.classList.add("hidden"), 3000);
 }
 
+function parseErrorDetail(data) {
+  if (!data || !data.detail) return "请求失败";
+  if (typeof data.detail === "string") return data.detail;
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((d) => d.msg || String(d)).join("；");
+  }
+  return String(data.detail);
+}
+
 async function api(path, options = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+  const res = await fetch(`${API}${path}`, { ...options, headers });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && path !== "/auth/login" && path !== "/auth/register") {
+    logout(false);
+    throw new Error(parseErrorDetail(data) || "请重新登录");
+  }
   if (!res.ok) {
-    throw new Error(data.detail || res.statusText || "请求失败");
+    throw new Error(parseErrorDetail(data) || res.statusText || "请求失败");
   }
   return data;
+}
+
+function setAuthUI(loggedIn) {
+  document.getElementById("auth-screen").classList.toggle("hidden", loggedIn);
+  document.getElementById("app-shell").classList.toggle("hidden", !loggedIn);
+  document.getElementById("user-bar").classList.toggle("hidden", !loggedIn);
+  if (loggedIn && currentUser) {
+    document.getElementById("current-username").textContent = currentUser.username;
+  }
+}
+
+function saveAuth(token, username) {
+  authToken = token;
+  currentUser = { username };
+  localStorage.setItem(TOKEN_KEY, token);
+  setAuthUI(true);
+}
+
+function logout(showMsg = true) {
+  authToken = "";
+  currentUser = null;
+  localStorage.removeItem(TOKEN_KEY);
+  setAuthUI(false);
+  tRecords = [];
+  ingRecords = [];
+  selledRecords = [];
+  allocations = [];
+  if (showMsg) {
+    showToast("已退出登录");
+  }
+}
+
+function setAuthMode(mode) {
+  authMode = mode;
+  document.querySelectorAll(".auth-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.mode === mode);
+  });
+  document.getElementById("auth-title").textContent = mode === "login" ? "登录" : "注册";
+  document.getElementById("auth-submit").textContent = mode === "login" ? "登录" : "注册";
+  document.querySelector("#form-auth input[name=password]").autocomplete =
+    mode === "login" ? "current-password" : "new-password";
 }
 
 function statusBadge(status) {
@@ -55,6 +114,53 @@ function statusBadge(status) {
 function gainClass(v) {
   if (v === null || v === undefined) return "";
   return Number(v) >= 0 ? "gain-pos" : "gain-neg";
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll(".auth-tab").forEach((btn) => {
+  btn.addEventListener("click", () => setAuthMode(btn.dataset.mode));
+});
+
+document.getElementById("form-auth").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const path = authMode === "login" ? "/auth/login" : "/auth/register";
+  try {
+    const data = await api(path, {
+      method: "POST",
+      body: JSON.stringify({
+        username: String(fd.get("username")).trim(),
+        password: String(fd.get("password")),
+      }),
+    });
+    saveAuth(data.token, data.username);
+    showToast(authMode === "login" ? "登录成功" : "注册成功");
+    e.target.reset();
+    await refreshAll();
+  } catch (err) {
+    showToast(err.message, true);
+  }
+});
+
+document.getElementById("btn-logout").addEventListener("click", () => logout());
+
+async function bootstrap() {
+  setAuthMode("login");
+  if (!authToken) {
+    setAuthUI(false);
+    return;
+  }
+  try {
+    const me = await api("/auth/me");
+    currentUser = { username: me.username, id: me.id };
+    setAuthUI(true);
+    await refreshAll();
+  } catch {
+    logout(false);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -462,4 +568,4 @@ window.openSelled = openSelled;
 // Init
 // ---------------------------------------------------------------------------
 
-refreshAll().catch((err) => showToast(err.message, true));
+bootstrap().catch((err) => showToast(err.message, true));

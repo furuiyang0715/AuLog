@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import os
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Optional
 
 from bson import ObjectId
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pymongo.collection import Collection
 
+from app.auth import create_token, hash_password, user_id, verify_password
+from app.auth import get_current_user as auth_get_current_user
 from app.db import get_db
 
-app = FastAPI(title="AuLog", version="0.1.0")
+app = FastAPI(title="AuLog", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,6 +24,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def ensure_indexes() -> None:
+    db = get_db()
+    db.users.create_index("username", unique=True)
+    for name in ("t_records", "ing_records", "selled_records", "ing_allocations"):
+        db[name].create_index("user_id")
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +52,10 @@ def serialize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
     for key, value in doc.items():
         if key == "_id":
             out["id"] = str(value)
+        elif key == "user_id":
+            continue
+        elif key == "password_hash":
+            continue
         elif isinstance(value, ObjectId):
             out[key] = str(value)
         elif isinstance(value, datetime):
@@ -148,23 +162,39 @@ def enrich_selled(doc: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
-def get_ing_or_404(ing_id: str, ing_col: Collection) -> dict[str, Any]:
-    doc = ing_col.find_one({"_id": oid(ing_id)})
+def get_ing_or_404(
+    ing_id: str, ing_col: Collection, uid: ObjectId
+) -> dict[str, Any]:
+    doc = ing_col.find_one({"_id": oid(ing_id), "user_id": uid})
     if not doc:
         raise HTTPException(status_code=404, detail="进货记录不存在")
     return doc
 
 
-def get_t_or_404(t_id: str, t_col: Collection) -> dict[str, Any]:
-    doc = t_col.find_one({"_id": oid(t_id)})
+def get_t_or_404(t_id: str, t_col: Collection, uid: ObjectId) -> dict[str, Any]:
+    doc = t_col.find_one({"_id": oid(t_id), "user_id": uid})
     if not doc:
         raise HTTPException(status_code=404, detail="倒T 记录不存在")
+    return doc
+
+
+def get_alloc_or_404(
+    allocation_id: str, alloc_col: Collection, uid: ObjectId
+) -> dict[str, Any]:
+    doc = alloc_col.find_one({"_id": oid(allocation_id), "user_id": uid})
+    if not doc:
+        raise HTTPException(status_code=404, detail="分配记录不存在")
     return doc
 
 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
+
+class AuthBody(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=6, max_length=128)
 
 
 class TCreate(BaseModel):
@@ -196,23 +226,71 @@ class SelledAllocation(BaseModel):
     sell_price: float = Field(gt=0)
 
 
+def auth_response(user: dict[str, Any]) -> dict[str, str]:
+    username = user["username"]
+    token = create_token(user["_id"], username)
+    return {"token": token, "username": username}
+
+
+# ---------------------------------------------------------------------------
+# Routes — Auth
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/auth/register", status_code=201)
+def register(body: AuthBody):
+    db = get_db()
+    username = body.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="用户名不能为空")
+    if db.users.find_one({"username": username}):
+        raise HTTPException(status_code=400, detail="用户名已存在")
+    doc = {
+        "username": username,
+        "password_hash": hash_password(body.password),
+        "created_at": datetime.utcnow(),
+    }
+    result = db.users.insert_one(doc)
+    doc["_id"] = result.inserted_id
+    return auth_response(doc)
+
+
+@app.post("/api/auth/login")
+def login(body: AuthBody):
+    db = get_db()
+    username = body.username.strip()
+    user = db.users.find_one({"username": username})
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    return auth_response(user)
+
+
+@app.get("/api/auth/me")
+def me(current_user: dict[str, Any] = Depends(auth_get_current_user)):
+    return serialize(current_user)
+
+
 # ---------------------------------------------------------------------------
 # Routes — 倒T
 # ---------------------------------------------------------------------------
 
 
 @app.get("/api/t-records")
-def list_t_records():
+def list_t_records(uid: ObjectId = Depends(user_id)):
     db = get_db()
     allocations = db.ing_allocations
-    rows = [enrich_t(doc, allocations) for doc in db.t_records.find().sort("_id", -1)]
+    rows = [
+        enrich_t(doc, allocations)
+        for doc in db.t_records.find({"user_id": uid}).sort("_id", -1)
+    ]
     return rows
 
 
 @app.post("/api/t-records", status_code=201)
-def create_t_record(body: TCreate):
+def create_t_record(body: TCreate, uid: ObjectId = Depends(user_id)):
     db = get_db()
     doc = {
+        "user_id": uid,
         "mark": body.mark.strip(),
         "count": round2(body.count),
         "pop_amount": round2(body.pop_amount),
@@ -225,12 +303,15 @@ def create_t_record(body: TCreate):
 
 
 @app.delete("/api/t-records/{record_id}")
-def delete_t_record(record_id: str):
+def delete_t_record(record_id: str, uid: ObjectId = Depends(user_id)):
     db = get_db()
     _id = oid(record_id)
-    if db.ing_allocations.count_documents({"target_type": "T_MATCH", "target_id": _id}):
+    get_t_or_404(record_id, db.t_records, uid)
+    if db.ing_allocations.count_documents(
+        {"user_id": uid, "target_type": "T_MATCH", "target_id": _id}
+    ):
         raise HTTPException(status_code=400, detail="已有配对分配，无法删除")
-    result = db.t_records.delete_one({"_id": _id})
+    result = db.t_records.delete_one({"_id": _id, "user_id": uid})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
@@ -242,20 +323,22 @@ def delete_t_record(record_id: str):
 
 
 @app.get("/api/ing-records")
-def list_ing_records():
+def list_ing_records(uid: ObjectId = Depends(user_id)):
     db = get_db()
     allocations = db.ing_allocations
     rows = [
-        enrich_ing(doc, allocations) for doc in db.ing_records.find().sort("_id", -1)
+        enrich_ing(doc, allocations)
+        for doc in db.ing_records.find({"user_id": uid}).sort("_id", -1)
     ]
     return rows
 
 
 @app.post("/api/ing-records", status_code=201)
-def create_ing_record(body: IngCreate):
+def create_ing_record(body: IngCreate, uid: ObjectId = Depends(user_id)):
     db = get_db()
     amount = round2(body.amount if body.amount is not None else body.price * body.count)
     doc = {
+        "user_id": uid,
         "date": body.date.strip(),
         "mark": body.mark.strip(),
         "price": round2(body.price),
@@ -269,12 +352,13 @@ def create_ing_record(body: IngCreate):
 
 
 @app.delete("/api/ing-records/{record_id}")
-def delete_ing_record(record_id: str):
+def delete_ing_record(record_id: str, uid: ObjectId = Depends(user_id)):
     db = get_db()
     _id = oid(record_id)
-    if db.ing_allocations.count_documents({"ing_id": _id}):
+    get_ing_or_404(record_id, db.ing_records, uid)
+    if db.ing_allocations.count_documents({"user_id": uid, "ing_id": _id}):
         raise HTTPException(status_code=400, detail="已有分配记录，无法删除")
-    result = db.ing_records.delete_one({"_id": _id})
+    result = db.ing_records.delete_one({"_id": _id, "user_id": uid})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
@@ -286,19 +370,28 @@ def delete_ing_record(record_id: str):
 
 
 @app.get("/api/selled-records")
-def list_selled_records():
+def list_selled_records(uid: ObjectId = Depends(user_id)):
     db = get_db()
-    rows = [enrich_selled(doc) for doc in db.selled_records.find().sort("_id", -1)]
+    rows = [
+        enrich_selled(doc)
+        for doc in db.selled_records.find({"user_id": uid}).sort("_id", -1)
+    ]
     return rows
 
 
 @app.delete("/api/selled-records/{record_id}")
-def delete_selled_record(record_id: str):
+def delete_selled_record(record_id: str, uid: ObjectId = Depends(user_id)):
     db = get_db()
     _id = oid(record_id)
-    if db.ing_allocations.count_documents({"target_type": "SELLED", "target_id": _id}):
-        db.ing_allocations.delete_many({"target_type": "SELLED", "target_id": _id})
-    result = db.selled_records.delete_one({"_id": _id})
+    if not db.selled_records.find_one({"_id": _id, "user_id": uid}):
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if db.ing_allocations.count_documents(
+        {"user_id": uid, "target_type": "SELLED", "target_id": _id}
+    ):
+        db.ing_allocations.delete_many(
+            {"user_id": uid, "target_type": "SELLED", "target_id": _id}
+        )
+    result = db.selled_records.delete_one({"_id": _id, "user_id": uid})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="记录不存在")
     return {"ok": True}
@@ -310,17 +403,20 @@ def delete_selled_record(record_id: str):
 
 
 @app.get("/api/allocations")
-def list_allocations():
+def list_allocations(uid: ObjectId = Depends(user_id)):
     db = get_db()
-    rows = [serialize(doc) for doc in db.ing_allocations.find().sort("_id", -1)]
+    rows = [
+        serialize(doc)
+        for doc in db.ing_allocations.find({"user_id": uid}).sort("_id", -1)
+    ]
     return rows
 
 
 @app.post("/api/allocations/t-match", status_code=201)
-def allocate_to_t(body: TMatchAllocation):
+def allocate_to_t(body: TMatchAllocation, uid: ObjectId = Depends(user_id)):
     db = get_db()
-    ing = get_ing_or_404(body.ing_id, db.ing_records)
-    t_doc = get_t_or_404(body.t_id, db.t_records)
+    ing = get_ing_or_404(body.ing_id, db.ing_records, uid)
+    t_doc = get_t_or_404(body.t_id, db.t_records, uid)
     allocations = db.ing_allocations
 
     ing_remaining = round2(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
@@ -333,6 +429,7 @@ def allocate_to_t(body: TMatchAllocation):
 
     amount = round2(body.count * float(ing["price"]))
     alloc = {
+        "user_id": uid,
         "ing_id": ing["_id"],
         "target_type": "T_MATCH",
         "target_id": t_doc["_id"],
@@ -351,9 +448,9 @@ def allocate_to_t(body: TMatchAllocation):
 
 
 @app.post("/api/allocations/selled", status_code=201)
-def allocate_to_selled(body: SelledAllocation):
+def allocate_to_selled(body: SelledAllocation, uid: ObjectId = Depends(user_id)):
     db = get_db()
-    ing = get_ing_or_404(body.ing_id, db.ing_records)
+    ing = get_ing_or_404(body.ing_id, db.ing_records, uid)
     allocations = db.ing_allocations
 
     ing_remaining = round2(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
@@ -365,6 +462,7 @@ def allocate_to_selled(body: SelledAllocation):
     sell_amount = round2(body.count * body.sell_price)
 
     selled_doc = {
+        "user_id": uid,
         "date": body.date.strip(),
         "mark": body.mark.strip() or ing.get("mark", ""),
         "buy_price": round2(buy_price),
@@ -378,6 +476,7 @@ def allocate_to_selled(body: SelledAllocation):
     selled_doc["_id"] = selled_result.inserted_id
 
     alloc = {
+        "user_id": uid,
         "ing_id": ing["_id"],
         "target_type": "SELLED",
         "target_id": selled_doc["_id"],
@@ -396,17 +495,16 @@ def allocate_to_selled(body: SelledAllocation):
 
 
 @app.delete("/api/allocations/{allocation_id}")
-def delete_allocation(allocation_id: str):
+def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
     db = get_db()
-    _id = oid(allocation_id)
-    alloc = db.ing_allocations.find_one({"_id": _id})
-    if not alloc:
-        raise HTTPException(status_code=404, detail="分配记录不存在")
+    alloc = get_alloc_or_404(allocation_id, db.ing_allocations, uid)
 
     if alloc["target_type"] == "SELLED":
-        db.selled_records.delete_one({"_id": alloc["target_id"]})
+        db.selled_records.delete_one(
+            {"_id": alloc["target_id"], "user_id": uid}
+        )
 
-    db.ing_allocations.delete_one({"_id": _id})
+    db.ing_allocations.delete_one({"_id": alloc["_id"], "user_id": uid})
     return {"ok": True}
 
 
