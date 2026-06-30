@@ -40,6 +40,8 @@ const form = ref({
 
 const showEdit = ref(false);
 const editingId = ref(null);
+const showLinkedIng = ref(false);
+const selectedT = ref(null);
 const editForm = ref({
   mark: "",
   count: null,
@@ -47,6 +49,88 @@ const editForm = ref({
   sold_at: null,
   allocated_count: 0,
 });
+
+function tMatchAllocations(tId) {
+  return ledger.allocations.value.filter(
+    (a) => a.target_type === "T_MATCH" && a.target_id === tId
+  );
+}
+
+function buildLinkedRows(t) {
+  const sellPrice = Number(t.price) || 0;
+  return tMatchAllocations(t.id).map((alloc) => {
+    const ing = ledger.ingRecords.value.find((i) => i.id === alloc.ing_id);
+    const buyPrice = ing != null ? Number(ing.price) : null;
+    return {
+      ingDate: ing?.date,
+      ingMark: ing?.mark || "—",
+      buyPrice,
+      matchCount: alloc.count,
+      matchAmount: alloc.amount,
+      priceDiff: buyPrice != null ? sellPrice - buyPrice : null,
+    };
+  });
+}
+
+const linkedRows = computed(() => (selectedT.value ? buildLinkedRows(selectedT.value) : []));
+
+const linkedSummary = computed(() => {
+  const rows = linkedRows.value;
+  return {
+    totalCount: rows.reduce((sum, row) => sum + (Number(row.matchCount) || 0), 0),
+    totalAmount: rows.reduce((sum, row) => sum + (Number(row.matchAmount) || 0), 0),
+  };
+});
+
+const linkedModalTitle = computed(() => {
+  if (!selectedT.value) return "配对进货";
+  const name =
+    selectedT.value.mark ||
+    formatDateDisplay(selectedT.value.sold_at) ||
+    `${fmt(selectedT.value.count)} 克`;
+  return `配对进货 · ${name}`;
+});
+
+function openLinkedIng(record) {
+  selectedT.value = record;
+  showLinkedIng.value = true;
+}
+
+function renderMark(r) {
+  const matchCount = tMatchAllocations(r.id).length;
+  const label = r.mark || "—";
+  return h(
+    "button",
+    {
+      type: "button",
+      class: ["mark-link", matchCount > 0 ? "mark-link-active" : "mark-link-muted"],
+      onClick: () => openLinkedIng(r),
+    },
+    [
+      label,
+      matchCount > 0 ? h("span", { class: "mark-badge" }, ` (${matchCount})`) : null,
+    ]
+  );
+}
+
+function renderPriceDiff(row) {
+  if (row.priceDiff == null) return "—";
+  const type = gainType(row.priceDiff);
+  return h(
+    "span",
+    { class: type === "success" ? "gain-positive" : type === "error" ? "gain-negative" : "" },
+    fmt(row.priceDiff)
+  );
+}
+
+const linkedColumns = [
+  { title: "进货日期", key: "ingDate", render: (r) => formatDateDisplay(r.ingDate) },
+  { title: "备注", key: "ingMark" },
+  { title: "买入价", key: "buyPrice", render: (r) => fmt(r.buyPrice) },
+  { title: "配对克数", key: "matchCount", render: (r) => fmt(r.matchCount) },
+  { title: "买回成本", key: "matchAmount", render: (r) => fmt(r.matchAmount) },
+  { title: "价差/克", key: "priceDiff", render: renderPriceDiff },
+];
 
 function hStatus(status) {
   const meta = statusMap[status] || { label: status, type: "default" };
@@ -78,7 +162,7 @@ function actionButtons(r) {
 }
 
 const columns = [
-  { title: "备注", key: "mark", render: (r) => r.mark || "—" },
+  { title: "备注", key: "mark", render: renderMark },
   { title: "卖出日期", key: "sold_at", render: (r) => formatDateDisplay(r.sold_at) },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },
   { title: "回笼", key: "pop_amount", render: (r) => fmt(r.pop_amount) },
@@ -260,6 +344,40 @@ function onDelete(id) {
       </div>
     </NForm>
   </NModal>
+
+  <NModal
+    v-model:show="showLinkedIng"
+    preset="card"
+    :title="linkedModalTitle"
+    style="max-width: 640px"
+  >
+    <p v-if="selectedT" class="hint-text linked-subtitle">
+      已配 {{ fmt(selectedT.allocated_count) }} 克 / 共 {{ fmt(selectedT.count) }} 克 · 卖价
+      {{ fmt(selectedT.price) }}
+    </p>
+
+    <template v-if="linkedRows.length">
+      <NDataTable
+        :columns="linkedColumns"
+        :data="linkedRows"
+        :bordered="false"
+        size="small"
+        :pagination="false"
+      />
+      <p class="hint-text linked-total">
+        合计：配对 {{ fmt(linkedSummary.totalCount) }} 克 · 买回成本
+        {{ fmt(linkedSummary.totalAmount) }}
+      </p>
+    </template>
+    <template v-else>
+      <p class="linked-empty">尚未配对进货</p>
+      <p class="hint-text">可在「进货 ing」中对低价货源操作「配对倒T」。</p>
+    </template>
+
+    <div class="modal-actions">
+      <NButton @click="showLinkedIng = false">关闭</NButton>
+    </div>
+  </NModal>
 </template>
 
 <style scoped>
@@ -305,5 +423,53 @@ function onDelete(id) {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+.mark-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mark-link-active {
+  color: #d4a853;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mark-link-active:hover {
+  color: #e8c068;
+}
+
+.mark-link-muted {
+  color: #8b929e;
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 2px;
+}
+
+.mark-link-muted:hover {
+  color: #a8aeb8;
+}
+
+.mark-badge {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.linked-subtitle {
+  margin: 0 0 1rem;
+}
+
+.linked-total {
+  margin: 0.75rem 0 0;
+}
+
+.linked-empty {
+  margin: 0 0 0.35rem;
+  color: #c9cdd4;
 }
 </style>
