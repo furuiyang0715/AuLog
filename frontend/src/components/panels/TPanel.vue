@@ -31,6 +31,12 @@ const closedGainTotal = computed(() =>
     .reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
 );
 
+const buybackRemainingTotal = computed(() =>
+  ledger.tRecords.value
+    .filter((r) => r.status !== "CLOSED")
+    .reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
+);
+
 const form = ref({
   mark: "",
   count: null,
@@ -299,6 +305,16 @@ function onDelete(id) {
     </div>
   </NCard>
 
+  <NCard :bordered="false" class="section-card summary-card">
+    <div class="summary-row">
+      <div>
+        <div class="summary-label">当前可买入总克数</div>
+        <div class="hint-text">所有未闭环倒 T 的剩余克数之和（待买回）</div>
+      </div>
+      <div class="summary-value summary-count">{{ fmt(buybackRemainingTotal) }}</div>
+    </div>
+  </NCard>
+
   <NCard title="倒 T 列表" :bordered="false" class="section-card">
     <NDataTable
       :columns="columns"
@@ -410,6 +426,10 @@ function onDelete(id) {
   font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.summary-count {
+  color: #d4a853;
 }
 
 .actions {

@@ -1,5 +1,5 @@
 <script setup>
-import { h, inject, ref } from "vue";
+import { computed, h, inject, ref } from "vue";
 import {
   NButton,
   NCard,
@@ -25,6 +25,10 @@ const message = useMessage();
 const dialog = useDialog();
 const { pagination, watchDataLength } = usePagination(10);
 watchDataLength(ledger.ingRecords);
+
+const ingUnclosedTotal = computed(() =>
+  ledger.ingRecords.value.reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
+);
 
 const form = ref({
   date: null,
@@ -290,6 +294,16 @@ function onDelete(id) {
     </NForm>
   </NCard>
 
+  <NCard :bordered="false" class="section-card summary-card">
+    <div class="summary-row">
+      <div>
+        <div class="summary-label">当前需闭合总克数</div>
+        <div class="hint-text">进货未分完的剩余克数之和（未分配 + 部分分配）</div>
+      </div>
+      <div class="summary-value summary-count">{{ fmt(ingUnclosedTotal) }}</div>
+    </div>
+  </NCard>
+
   <NCard title="进货列表" :bordered="false" class="section-card">
     <NDataTable
       :columns="columns"
@@ -383,6 +397,33 @@ function onDelete(id) {
 
 .full-width {
   width: 100%;
+}
+
+.summary-card {
+  background: linear-gradient(135deg, rgba(212, 168, 83, 0.08) 0%, rgba(26, 29, 35, 0.6) 100%);
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.summary-label {
+  font-size: 0.95rem;
+  color: #d4a853;
+  font-weight: 600;
+}
+
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-count {
+  color: #d4a853;
 }
 
 .actions {
