@@ -10,10 +10,11 @@ if [ -f .env ]; then
 fi
 
 PORT="${PORT:-18888}"
+HOST="${HOST:-0.0.0.0}"
 
 if [ -d .venv ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
 fi
 
-exec uvicorn app.main:app --host 127.0.0.1 --port "$PORT" --reload
+exec uvicorn app.main:app --host "$HOST" --port "$PORT" --reload
