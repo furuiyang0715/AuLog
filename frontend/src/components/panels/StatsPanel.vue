@@ -139,6 +139,21 @@ onMounted(() => {
           ({{ goldPrice.change_rate }})
         </span>
       </div>
+      <div v-if="goldPrice?.london" class="london-quote">
+        <span class="london-label">{{ goldPrice.london.label }}</span>
+        <span class="london-price">{{ fmt(goldPrice.london.price) }}</span>
+        <span class="london-unit">{{ goldPrice.london.unit }}</span>
+        <template v-if="goldPrice.london.change_amount != null">
+          <span class="london-sep">·</span>
+          <span :class="gainClass(goldPrice.london.change_amount)">
+            {{ goldPrice.london.change_amount >= 0 ? "+" : "" }}{{ fmt(goldPrice.london.change_amount) }}
+          </span>
+          <span v-if="goldPrice.london.change_rate" :class="gainClass(goldPrice.london.change_amount)">
+            ({{ goldPrice.london.change_rate }})
+          </span>
+        </template>
+        <span class="london-note">仅参考，不参与预估计算</span>
+      </div>
       <p v-if="goldPrice?.updated_at" class="hint-text updated-at">
         更新于 {{ new Date(goldPrice.updated_at).toLocaleString("zh-CN") }}
       </p>
@@ -245,5 +260,36 @@ onMounted(() => {
 
 .estimate-intro {
   margin: 0 0 1rem;
+}
+
+.london-quote {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  color: #8b929e;
+}
+
+.london-label {
+  color: #a8aeb8;
+}
+
+.london-price {
+  font-weight: 600;
+  color: #d4a853;
+  font-variant-numeric: tabular-nums;
+}
+
+.london-unit,
+.london-sep,
+.london-note {
+  color: #8b929e;
+}
+
+.london-note {
+  font-size: 0.75rem;
+  opacity: 0.85;
 }
 </style>

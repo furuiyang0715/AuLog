@@ -16,7 +16,7 @@ from pymongo.collection import Collection
 from app.auth import create_token, hash_password, user_id, verify_password
 from app.auth import get_current_user as auth_get_current_user
 from app.db import get_db
-from app.gold_price import fetch_zheshang_gold_price
+from app.gold_price import fetch_stats_gold_prices
 
 app = FastAPI(title="AuLog", version="0.2.0")
 
@@ -661,7 +661,7 @@ def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
 def get_gold_price(refresh: bool = False, uid: ObjectId = Depends(user_id)):
     del uid
     try:
-        return fetch_zheshang_gold_price(force=refresh)
+        return fetch_stats_gold_prices(force=refresh)
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"获取金价失败: {exc}") from exc
     except (KeyError, TypeError, ValueError) as exc:
