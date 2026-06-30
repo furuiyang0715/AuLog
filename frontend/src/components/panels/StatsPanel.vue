@@ -22,6 +22,54 @@ const selledGain = computed(() =>
 
 const totalGain = computed(() => tGainClosed.value + selledGain.value);
 
+const currentGold = computed(() => {
+  const price = goldPrice.value?.price;
+  if (price == null || price === "") return null;
+  return Number(price);
+});
+
+const expectedBuybackGain = computed(() => {
+  const gold = currentGold.value;
+  if (gold == null) return null;
+  return round2(
+    ledger.tRecords.value
+      .filter((r) => r.status !== "CLOSED" && Number(r.remaining_count) > 0)
+      .reduce((sum, r) => {
+        const sellPrice = Number(r.price) || 0;
+        const remaining = Number(r.remaining_count) || 0;
+        return sum + (sellPrice - gold) * remaining;
+      }, 0)
+  );
+});
+
+const expectedSellGain = computed(() => {
+  const gold = currentGold.value;
+  if (gold == null) return null;
+  return round2(
+    ledger.ingRecords.value
+      .filter((r) => Number(r.remaining_count) > 0)
+      .reduce((sum, r) => {
+        const buyPrice = Number(r.price) || 0;
+        const remaining = Number(r.remaining_count) || 0;
+        return sum + (gold - buyPrice) * remaining;
+      }, 0)
+  );
+});
+
+const expectedNetDiff = computed(() => {
+  if (expectedBuybackGain.value == null || expectedSellGain.value == null) return null;
+  return round2(expectedBuybackGain.value + expectedSellGain.value);
+});
+
+function round2(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function fmtEstimate(value) {
+  if (value == null) return "—";
+  return fmt(value);
+}
+
 function gainClass(value) {
   const type = gainType(value);
   if (type === "success") return "gain-positive";
@@ -97,6 +145,35 @@ onMounted(() => {
       <p v-else-if="!goldLoading" class="hint-text">暂无金价数据</p>
     </NSpin>
   </NCard>
+
+  <NCard title="现价预估" :bordered="false" class="section-card">
+    <p class="hint-text estimate-intro">
+      按上方当前金价估算：若未闭合倒 T 现在买回、未分配进货现在卖出，各自的浮动盈亏（可为负，作操作参考）。
+    </p>
+    <div class="stats-grid">
+      <div class="stat-item summary-card">
+        <div class="summary-label">预计买回收益（倒 T 未闭合）</div>
+        <div class="hint-text">Σ (T 卖出价 − 现价) × 剩余克数</div>
+        <div class="summary-value" :class="gainClass(expectedBuybackGain)">
+          {{ fmtEstimate(expectedBuybackGain) }}
+        </div>
+      </div>
+      <div class="stat-item summary-card">
+        <div class="summary-label">预计卖出收益（进货未分配）</div>
+        <div class="hint-text">Σ (现价 − 进货价) × 剩余克数</div>
+        <div class="summary-value" :class="gainClass(expectedSellGain)">
+          {{ fmtEstimate(expectedSellGain) }}
+        </div>
+      </div>
+      <div class="stat-item summary-card stat-item-total">
+        <div class="summary-label">预估净差</div>
+        <div class="hint-text">上述两项相加 · 两边均按现价操作的浮动盈亏</div>
+        <div class="summary-value" :class="gainClass(expectedNetDiff)">
+          {{ fmtEstimate(expectedNetDiff) }}
+        </div>
+      </div>
+    </div>
+  </NCard>
 </template>
 
 <style scoped>
@@ -164,5 +241,9 @@ onMounted(() => {
 
 .updated-at {
   margin-top: 0.5rem;
+}
+
+.estimate-intro {
+  margin: 0 0 1rem;
 }
 </style>
