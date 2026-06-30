@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from typing import Any, Optional
 
+import requests
 from bson import ObjectId
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from pymongo.collection import Collection
 from app.auth import create_token, hash_password, user_id, verify_password
 from app.auth import get_current_user as auth_get_current_user
 from app.db import get_db
+from app.gold_price import fetch_zheshang_gold_price
 
 app = FastAPI(title="AuLog", version="0.2.0")
 
@@ -648,6 +650,22 @@ def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
 
     db.ing_allocations.delete_one({"_id": alloc["_id"], "user_id": uid})
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Routes — 统计
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/stats/gold-price")
+def get_gold_price(refresh: bool = False, uid: ObjectId = Depends(user_id)):
+    del uid
+    try:
+        return fetch_zheshang_gold_price(force=refresh)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"获取金价失败: {exc}") from exc
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"解析金价失败: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------
