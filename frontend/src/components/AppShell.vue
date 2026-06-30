@@ -13,7 +13,7 @@ import {
 import { setUnauthorizedHandler } from "../api/client";
 import { useAuth } from "../composables/useAuth";
 import { useLedger } from "../composables/useLedger";
-import AuthScreen from "./AuthScreen.vue";
+import DocPage from "./DocPage.vue";
 import TPanel from "./panels/TPanel.vue";
 import IngPanel from "./panels/IngPanel.vue";
 import SelledPanel from "./panels/SelledPanel.vue";
@@ -57,6 +57,10 @@ async function handleAuth(payload) {
   }
 }
 
+function scrollToAuth() {
+  document.getElementById("auth")?.scrollIntoView({ behavior: "smooth" });
+}
+
 function logout() {
   auth.logout();
   ledger.tRecords.value = [];
@@ -79,12 +83,15 @@ function logout() {
           <span>{{ auth.user.value.username }}</span>
           <NButton size="small" quaternary @click="logout">退出</NButton>
         </div>
+        <div v-else-if="!auth.loading.value" class="user-bar">
+          <NButton size="small" type="primary" @click="scrollToAuth">登录 / 注册</NButton>
+        </div>
       </div>
     </NLayoutHeader>
 
     <NLayoutContent>
       <NSpin :show="auth.loading.value">
-        <AuthScreen
+        <DocPage
           v-if="!auth.user.value && !auth.loading.value"
           :loading="authLoading"
           @success="handleAuth"
