@@ -90,20 +90,22 @@ function logout() {
         />
 
         <template v-else-if="auth.user.value">
-          <NTabs v-model:value="activeTab" type="line" animated class="main-tabs">
-            <NTabPane name="t" tab="倒 T">
-              <div class="page-container"><TPanel /></div>
-            </NTabPane>
-            <NTabPane name="ing" tab="进货 ing">
-              <div class="page-container"><IngPanel /></div>
-            </NTabPane>
-            <NTabPane name="selled" tab="反弹 selled">
-              <div class="page-container"><SelledPanel /></div>
-            </NTabPane>
-            <NTabPane name="alloc" tab="分配记录">
-              <div class="page-container"><AllocPanel /></div>
-            </NTabPane>
-          </NTabs>
+          <div class="content-shell">
+            <NTabs v-model:value="activeTab" type="line" animated class="main-tabs">
+              <NTabPane name="t" tab="倒 T">
+                <div class="page-container"><TPanel /></div>
+              </NTabPane>
+              <NTabPane name="ing" tab="进货 ing">
+                <div class="page-container"><IngPanel /></div>
+              </NTabPane>
+              <NTabPane name="selled" tab="反弹 selled">
+                <div class="page-container"><SelledPanel /></div>
+              </NTabPane>
+              <NTabPane name="alloc" tab="分配记录">
+                <div class="page-container"><AllocPanel /></div>
+              </NTabPane>
+            </NTabs>
+          </div>
         </template>
       </NSpin>
     </NLayoutContent>
@@ -151,8 +153,43 @@ function logout() {
   font-size: 0.875rem;
 }
 
+.content-shell {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+.main-tabs {
+  width: 100%;
+}
+
 .main-tabs :deep(.n-tabs-nav) {
-  padding: 0 1rem;
-  background: #1a1d23;
+  padding: 0;
+  background: transparent;
+}
+
+.main-tabs :deep(.n-tabs-pane-wrapper) {
+  width: 100%;
+  overflow: visible;
+}
+
+.main-tabs :deep(.n-tab-pane) {
+  width: 100%;
+}
+
+.main-tabs :deep(.n-data-table-wrapper) {
+  overflow-x: visible;
+}
+
+.main-tabs :deep(.n-data-table-base-table) {
+  width: 100%;
+  table-layout: auto;
+}
+
+.main-tabs :deep(.n-data-table-th),
+.main-tabs :deep(.n-data-table-td) {
+  white-space: normal;
 }
 </style>

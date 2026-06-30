@@ -297,7 +297,6 @@ function onDelete(id) {
       :loading="ledger.loading.value"
       :bordered="false"
       size="small"
-      :scroll-x="1180"
       :pagination="pagination"
     />
   </NCard>
