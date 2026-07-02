@@ -57,3 +57,57 @@ export async function api(path, options = {}) {
 
   return data;
 }
+
+export async function apiDownload(path, fallbackFilename = "aulog-backup.json") {
+  const headers = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(`/api${path}`, { headers });
+  if (res.status === 401) {
+    setToken("");
+    onUnauthorized?.();
+    throw new Error("请重新登录");
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(data) || res.statusText || "下载失败");
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get("Content-Disposition") || "";
+  const match = disposition.match(/filename="([^"]+)"/);
+  const filename = match?.[1] || fallbackFilename;
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function apiUpload(path, file) {
+  const form = new FormData();
+  form.append("file", file);
+
+  const headers = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(`/api${path}`, { method: "POST", headers, body: form });
+  const data = await res.json().catch(() => ({}));
+
+  if (res.status === 401) {
+    setToken("");
+    onUnauthorized?.();
+    throw new Error(parseErrorDetail(data) || "请重新登录");
+  }
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data) || res.statusText || "上传失败");
+  }
+
+  return data;
+}

@@ -6,15 +6,16 @@ from typing import Any, Optional
 
 import requests
 from bson import ObjectId
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from pymongo.collection import Collection
 
 from app.auth import create_token, hash_password, user_id, verify_password
 from app.auth import get_current_user as auth_get_current_user
+from app.backup import export_user_data, import_user_data, parse_backup_json
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
 
@@ -666,6 +667,53 @@ def get_gold_price(refresh: bool = False, uid: ObjectId = Depends(user_id)):
         raise HTTPException(status_code=502, detail=f"获取金价失败: {exc}") from exc
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"解析金价失败: {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# Routes — 数据存档
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/data/export")
+def export_data(
+    current_user: dict[str, Any] = Depends(auth_get_current_user),
+    uid: ObjectId = Depends(user_id),
+):
+    db = get_db()
+    payload = export_user_data(db, uid, current_user["username"])
+    filename = f"aulog-backup-{current_user['username']}-{datetime.utcnow():%Y%m%d-%H%M%S}.json"
+    return JSONResponse(
+        content=payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/data/import")
+async def import_data(
+    file: UploadFile = File(...),
+    current_user: dict[str, Any] = Depends(auth_get_current_user),
+    uid: ObjectId = Depends(user_id),
+):
+    if not file.filename or not file.filename.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="请上传 .json 备份文件")
+
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="备份文件为空")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="备份文件不能超过 10MB")
+
+    payload = parse_backup_json(raw)
+    db = get_db()
+    counts = import_user_data(db, uid, payload)
+
+    backup_user = payload.get("username")
+    return {
+        "ok": True,
+        "backup_username": backup_user,
+        "current_username": current_user["username"],
+        "counts": counts,
+    }
 
 
 # ---------------------------------------------------------------------------

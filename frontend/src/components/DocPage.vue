@@ -61,7 +61,7 @@ const exampleSelled = [
 
           <h3>1. 倒 T 与进货分离</h3>
           <p>
-            <strong>倒 T</strong>只记录「卖出腿」：克数、回笼金额、卖出日期。买回不直接填在倒 T 里，而是通过
+            <strong>倒 T</strong>用于登记<strong>先高价卖出</strong>的记录：克数、回笼金额、卖出日期。低价买回不直接填在倒 T 里，而是通过
             <strong>进货 ing</strong> 录入实际买入，再用「配对」把 ing 克数挂到倒 T 上。这样一笔卖出可以分多次、用多批进货买回。
           </p>
 

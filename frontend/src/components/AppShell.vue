@@ -19,6 +19,7 @@ import IngPanel from "./panels/IngPanel.vue";
 import SelledPanel from "./panels/SelledPanel.vue";
 import AllocPanel from "./panels/AllocPanel.vue";
 import StatsPanel from "./panels/StatsPanel.vue";
+import DataPanel from "./panels/DataPanel.vue";
 
 const auth = useAuth();
 const ledger = useLedger();
@@ -114,6 +115,9 @@ function logout() {
               </NTabPane>
               <NTabPane name="stats" tab="统计">
                 <div class="page-container"><StatsPanel /></div>
+              </NTabPane>
+              <NTabPane name="backup" tab="存档">
+                <div class="page-container"><DataPanel /></div>
               </NTabPane>
             </NTabs>
           </div>
