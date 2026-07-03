@@ -23,7 +23,7 @@ import { usePagination } from "../../composables/usePagination";
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
-const { pagination, watchDataLength } = usePagination(10);
+const { pagination, resetPage, watchDataLength } = usePagination(10);
 watchDataLength(ledger.ingRecords);
 
 const ingUnclosedTotal = computed(() =>
@@ -61,7 +61,12 @@ function hStatus(status) {
 const columns = [
   { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
   { title: "备注", key: "mark", render: (r) => r.mark || "—" },
-  { title: "单价", key: "price", render: (r) => fmt(r.price) },
+  {
+    title: "单价",
+    key: "price",
+    sorter: (a, b) => Number(a.price) - Number(b.price),
+    render: (r) => fmt(r.price),
+  },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },
   { title: "总价", key: "amount", render: (r) => fmt(r.amount) },
   {
@@ -312,6 +317,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :pagination="pagination"
+      @update:sorter="resetPage"
     />
   </NCard>
 

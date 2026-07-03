@@ -22,7 +22,7 @@ import { usePagination } from "../../composables/usePagination";
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
-const { pagination, watchDataLength } = usePagination(10);
+const { pagination, resetPage, watchDataLength } = usePagination(10);
 watchDataLength(ledger.tRecords);
 
 const closedGainTotal = computed(() =>
@@ -172,7 +172,12 @@ const columns = [
   { title: "卖出日期", key: "sold_at", render: (r) => formatDateDisplay(r.sold_at) },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },
   { title: "回笼", key: "pop_amount", render: (r) => fmt(r.pop_amount) },
-  { title: "卖价", key: "price", render: (r) => fmt(r.price) },
+  {
+    title: "卖价",
+    key: "price",
+    sorter: (a, b) => Number(a.price) - Number(b.price),
+    render: (r) => fmt(r.price),
+  },
   { title: "买回成本", key: "push_amount", render: (r) => fmt(r.push_amount) },
   { title: "套利 gain", key: "gain", render: renderGain },
   {
@@ -323,6 +328,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :pagination="pagination"
+      @update:sorter="resetPage"
     />
   </NCard>
 
