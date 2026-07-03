@@ -35,6 +35,8 @@ def ensure_indexes() -> None:
     db.users.create_index("username", unique=True)
     for name in ("t_records", "ing_records", "selled_records", "ing_allocations"):
         db[name].create_index("user_id")
+    db.gold_price_samples.create_index([("label", 1), ("date", 1)])
+    db.gold_price_samples.create_index([("label", 1), ("sampled_at", -1)])
 
 
 # ---------------------------------------------------------------------------

@@ -439,6 +439,10 @@ HOST=0.0.0.0
 PORT=18888
 JWT_SECRET=<至少32位随机字符串>
 JWT_EXPIRE_DAYS=7
+
+# 可选：金价 cron 监控 PushPlus 推送
+PUSHPLUS_TOKEN=<你的 PushPlus Token>
+PUSHPLUS_TOPIC=
 ```
 
 生成随机 `JWT_SECRET`：
@@ -578,7 +582,63 @@ journalctl -u aulog -n 50 # 最近 50 行日志
 
 ---
 
-## 11. MongoDB 数据备份（建议）
+## 11. 金价监控 cron（可选）
+
+`cron/see_jd_gold.py` 每分钟采集 **浙商黄金 / 伦敦金**（复用 `app/gold_price.py` API），写入 MongoDB 集合 `gold_price_samples`（逐条采样，便于后续绘图），并在触发 `ALERT_CONFIG` 阈值时通过 **PushPlus** 推送。
+
+### 11.1 配置 PushPlus
+
+在 `.env` 中填写（见第 7 节）：
+
+```env
+PUSHPLUS_TOKEN=你的token
+PUSHPLUS_TOPIC=          # 可选，群组订阅编码
+```
+
+### 11.2 手动试跑
+
+```bash
+cd /root/AuLog
+source .venv/bin/activate
+set -a && source .env && set +a
+
+# 只采集 + 打印，不推送（未配置 TOKEN 时同样只采集）
+python -m cron.see_jd_gold
+
+# 强制推送一次报告
+python -m cron.see_jd_gold --push
+```
+
+验证 MongoDB 是否有采样：
+
+```bash
+docker exec -it $(docker ps -qf "ancestor=mongo:7") mongosh aulog --eval \
+  'db.gold_price_samples.find().sort({sampled_at:-1}).limit(3).pretty()'
+```
+
+### 11.3 添加 crontab（每分钟）
+
+```bash
+crontab -e
+```
+
+添加：
+
+```cron
+* * * * * cd /root/AuLog && .venv/bin/python -m cron.see_jd_gold >> /root/AuLog/cron.log 2>&1
+```
+
+查看日志：
+
+```bash
+tail -f /root/AuLog/cron.log
+```
+
+> 预警逻辑沿用 MetalCatcher 的 `ALERT_CONFIG`（涨跌幅、当日水位等），仅保留 PushPlus，不含钉钉。
+
+---
+
+## 12. MongoDB 数据备份（建议）
 
 ```bash
 mkdir -p /root/backups/mongodb
@@ -601,7 +661,7 @@ crontab -e
 
 ---
 
-## 12. 更新部署
+## 13. 更新部署
 
 代码有更新时：
 
