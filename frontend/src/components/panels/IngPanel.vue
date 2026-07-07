@@ -13,6 +13,7 @@ import {
   NInputNumber,
   NModal,
   NSelect,
+  NSwitch,
   NTag,
   useDialog,
   useMessage,
@@ -24,7 +25,16 @@ const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
-watchDataLength(ledger.ingRecords);
+
+const onlyIncomplete = ref(true);
+
+const tableRecords = computed(() => {
+  const rows = ledger.ingRecords.value;
+  if (!onlyIncomplete.value) return rows;
+  return rows.filter((r) => r.allocation_status !== "FULLY_ALLOCATED");
+});
+
+watchDataLength(tableRecords);
 
 const ingUnclosedTotal = computed(() =>
   ledger.ingRecords.value.reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
@@ -310,9 +320,15 @@ function onDelete(id) {
   </NCard>
 
   <NCard title="进货列表" :bordered="false" class="section-card">
+    <template #header-extra>
+      <label class="list-filter">
+        <NSwitch v-model:value="onlyIncomplete" size="small" @update:value="resetPage" />
+        <span>仅看未分完</span>
+      </label>
+    </template>
     <NDataTable
       :columns="columns"
-      :data="ledger.ingRecords.value"
+      :data="tableRecords"
       :loading="ledger.loading.value"
       :bordered="false"
       size="small"
@@ -443,5 +459,15 @@ function onDelete(id) {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+.list-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #8b929e;
+  cursor: pointer;
+  user-select: none;
 }
 </style>

@@ -12,6 +12,7 @@ import {
   NInput,
   NInputNumber,
   NModal,
+  NSwitch,
   NTag,
   useDialog,
   useMessage,
@@ -23,7 +24,16 @@ const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
-watchDataLength(ledger.tRecords);
+
+const onlyUnclosed = ref(true);
+
+const tableRecords = computed(() => {
+  const rows = ledger.tRecords.value;
+  if (!onlyUnclosed.value) return rows;
+  return rows.filter((r) => r.status !== "CLOSED");
+});
+
+watchDataLength(tableRecords);
 
 const closedGainTotal = computed(() =>
   ledger.tRecords.value
@@ -321,9 +331,15 @@ function onDelete(id) {
   </NCard>
 
   <NCard title="倒 T 列表" :bordered="false" class="section-card">
+    <template #header-extra>
+      <label class="list-filter">
+        <NSwitch v-model:value="onlyUnclosed" size="small" @update:value="resetPage" />
+        <span>仅看未闭环</span>
+      </label>
+    </template>
     <NDataTable
       :columns="columns"
-      :data="ledger.tRecords.value"
+      :data="tableRecords"
       :loading="ledger.loading.value"
       :bordered="false"
       size="small"
@@ -497,5 +513,15 @@ function onDelete(id) {
 .linked-empty {
   margin: 0 0 0.35rem;
   color: #c9cdd4;
+}
+
+.list-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: #8b929e;
+  cursor: pointer;
+  user-select: none;
 }
 </style>
