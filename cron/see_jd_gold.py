@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+from datetime import date
 import os
 import sys
 from pathlib import Path
@@ -49,6 +50,8 @@ ALERT_CONFIG = {
     "min_records": 3,
     "alert_labels": [],
 }
+
+ALERT_STATE_COLLECTION = "gold_alert_states"
 
 
 def fetch_monitored_prices() -> dict[str, dict[str, Any]]:
@@ -228,6 +231,86 @@ def build_pushplus_title_color_banner_html(all_data: list[dict[str, Any]]) -> st
     )
 
 
+def ensure_alert_state_indexes(db) -> None:
+    db[ALERT_STATE_COLLECTION].create_index([("date", 1)], unique=True)
+
+
+def _today_str() -> str:
+    return date.today().strftime("%Y-%m-%d")
+
+
+def load_active_alert_states(db) -> set[str]:
+    doc = db[ALERT_STATE_COLLECTION].find_one({"date": _today_str()})
+    if not doc:
+        return set()
+    return set(doc.get("active") or [])
+
+
+def save_active_alert_states(db, active: set[str]) -> None:
+    db[ALERT_STATE_COLLECTION].update_one(
+        {"date": _today_str()},
+        {
+            "$set": {
+                "active": sorted(active),
+                "updated_at": datetime.datetime.now(),
+            }
+        },
+        upsert=True,
+    )
+
+
+def _should_monitor_label(label: str) -> bool:
+    alert_labels = ALERT_CONFIG.get("alert_labels") or []
+    return not alert_labels or label in alert_labels
+
+
+def collect_item_alert_states(item: dict[str, Any]) -> set[str]:
+    """返回当前分钟该品种满足的预警状态键，如「浙商黄金:water_high」。"""
+    label = item["label"]
+    prefix = f"{label}:"
+    states: set[str] = set()
+
+    try:
+        pct_val = float(
+            str(item.get("price_change_percent", "0")).replace("%", "").replace("+", "")
+        )
+        if abs(pct_val) >= ALERT_CONFIG["price_change_percent"]:
+            kind = "spike_up" if pct_val > 0 else "spike_down"
+            states.add(f"{prefix}{kind}")
+    except (ValueError, TypeError):
+        pass
+
+    if item.get("has_stats") and item.get("record_count", 0) >= ALERT_CONFIG["min_records"]:
+        level = float(item.get("water_level", 50.0))
+        if level > ALERT_CONFIG["water_level_high"]:
+            states.add(f"{prefix}water_high")
+        elif level < ALERT_CONFIG["water_level_low"]:
+            states.add(f"{prefix}water_low")
+
+    return states
+
+
+def format_alert_message(state_key: str, item: dict[str, Any]) -> str:
+    label, kind = state_key.split(":", 1)
+    if kind == "spike_up":
+        pct_val = float(
+            str(item.get("price_change_percent", "0")).replace("%", "").replace("+", "")
+        )
+        return f"📢 {label} 暴涨 {pct_val:+.2f}%"
+    if kind == "spike_down":
+        pct_val = float(
+            str(item.get("price_change_percent", "0")).replace("%", "").replace("+", "")
+        )
+        return f"📢 {label} 暴跌 {pct_val:+.2f}%"
+    if kind == "water_high":
+        level = float(item.get("water_level", 50.0))
+        return f"🔴 {label} 水位 {level:.1f}%，接近当日最高"
+    if kind == "water_low":
+        level = float(item.get("water_level", 50.0))
+        return f"🔵 {label} 水位 {level:.1f}%，接近当日最低"
+    return f"⚠️ {label} 预警"
+
+
 def send_pushplus(title: str, content: str, template: str = "html") -> bool:
     if not PUSHPLUS_TOKEN:
         print("⚠️ 未配置 PUSHPLUS_TOKEN，跳过 PushPlus 推送")
@@ -256,34 +339,27 @@ def send_pushplus(title: str, content: str, template: str = "html") -> bool:
         return False
 
 
-def check_and_alert(all_data: list[dict[str, Any]]) -> bool:
-    alerts: list[str] = []
-    alert_labels = ALERT_CONFIG.get("alert_labels") or []
-
+def check_and_alert(db, all_data: list[dict[str, Any]]) -> bool:
+    items_by_label = {item["label"]: item for item in all_data}
+    current_states: set[str] = set()
     for item in all_data:
-        label = item["label"]
-        if alert_labels and label not in alert_labels:
+        if not _should_monitor_label(item["label"]):
             continue
+        current_states |= collect_item_alert_states(item)
 
-        try:
-            pct_val = float(
-                str(item.get("price_change_percent", "0")).replace("%", "").replace("+", "")
-            )
-            if abs(pct_val) >= ALERT_CONFIG["price_change_percent"]:
-                direction = "暴涨" if pct_val > 0 else "暴跌"
-                alerts.append(f"📢 {label} {direction} {pct_val:+.2f}%")
-        except (ValueError, TypeError):
-            pass
+    previous_states = load_active_alert_states(db)
+    new_states = current_states - previous_states
+    save_active_alert_states(db, current_states)
 
-        if item.get("has_stats") and item.get("record_count", 0) >= ALERT_CONFIG["min_records"]:
-            level = item.get("water_level", 50.0)
-            if level >= ALERT_CONFIG["water_level_high"]:
-                alerts.append(f"🔴 {label} 水位 {level:.1f}%，接近当日最高")
-            elif level <= ALERT_CONFIG["water_level_low"]:
-                alerts.append(f"🔵 {label} 水位 {level:.1f}%，接近当日最低")
-
-    if not alerts:
+    if not new_states:
+        if current_states:
+            print("ℹ️ 预警条件仍满足，但状态未变化，跳过推送")
         return False
+
+    alerts = [
+        format_alert_message(state_key, items_by_label[state_key.split(":", 1)[0]])
+        for state_key in sorted(new_states)
+    ]
 
     title = format_water_level_pushplus_title(all_data)
     html_content = build_pushplus_title_color_banner_html(all_data) + build_push_html(all_data)
@@ -382,12 +458,13 @@ def collect_gold_prices(db) -> list[dict[str, Any]]:
 def main(push_report: bool = False) -> None:
     db = get_db()
     ensure_indexes(db)
+    ensure_alert_state_indexes(db)
 
     all_data = collect_gold_prices(db)
     if not all_data or not PUSHPLUS_TOKEN:
         return
 
-    alerted = check_and_alert(all_data)
+    alerted = check_and_alert(db, all_data)
 
     if push_report and not alerted:
         title = format_water_level_pushplus_title(all_data)
