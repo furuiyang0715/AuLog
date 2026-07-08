@@ -10,17 +10,15 @@ const message = useMessage();
 const goldLoading = ref(false);
 const goldPrice = ref(null);
 
-const tGainClosed = computed(() =>
-  ledger.tRecords.value
-    .filter((r) => r.status === "CLOSED")
-    .reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
+const tRealizedGain = computed(() =>
+  ledger.tRecords.value.reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
 );
 
 const selledGain = computed(() =>
   ledger.selledRecords.value.reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
 );
 
-const totalGain = computed(() => tGainClosed.value + selledGain.value);
+const totalGain = computed(() => tRealizedGain.value + selledGain.value);
 
 const currentGold = computed(() => {
   const price = goldPrice.value?.price;
@@ -98,9 +96,9 @@ onMounted(() => {
   <NCard title="获利统计" :bordered="false" class="section-card">
     <div class="stats-grid">
       <div class="stat-item summary-card">
-        <div class="summary-label">倒 T 获利（已闭环）</div>
-        <div class="hint-text">与倒 T 页「已闭环套利合计」一致</div>
-        <div class="summary-value" :class="gainClass(tGainClosed)">{{ fmt(tGainClosed) }}</div>
+        <div class="summary-label">倒 T 已实现获利</div>
+        <div class="hint-text">含部分配对与已闭环的 gain 之和</div>
+        <div class="summary-value" :class="gainClass(tRealizedGain)">{{ fmt(tRealizedGain) }}</div>
       </div>
       <div class="stat-item summary-card">
         <div class="summary-label">反弹卖出获利</div>
@@ -109,7 +107,7 @@ onMounted(() => {
       </div>
       <div class="stat-item summary-card stat-item-total">
         <div class="summary-label">获利总和</div>
-        <div class="hint-text">倒 T 已闭环 + 反弹卖出</div>
+        <div class="hint-text">倒 T 已实现 + 反弹卖出</div>
         <div class="summary-value" :class="gainClass(totalGain)">{{ fmt(totalGain) }}</div>
       </div>
     </div>

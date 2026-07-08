@@ -35,10 +35,8 @@ const tableRecords = computed(() => {
 
 watchDataLength(tableRecords);
 
-const closedGainTotal = computed(() =>
-  ledger.tRecords.value
-    .filter((r) => r.status === "CLOSED")
-    .reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
+const tRealizedGainTotal = computed(() =>
+  ledger.tRecords.value.reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
 );
 
 const buybackRemainingTotal = computed(() =>
@@ -311,11 +309,11 @@ function onDelete(id) {
   <NCard :bordered="false" class="section-card summary-card">
     <div class="summary-row">
       <div>
-        <div class="summary-label">已闭环套利合计</div>
-        <div class="hint-text">仅统计状态为「已闭环」的 gain 之和</div>
+        <div class="summary-label">倒 T 已实现获利</div>
+        <div class="hint-text">含部分配对与已闭环的 gain 之和</div>
       </div>
-      <div class="summary-value" :class="gainType(closedGainTotal) === 'success' ? 'gain-positive' : gainType(closedGainTotal) === 'error' ? 'gain-negative' : ''">
-        {{ fmt(closedGainTotal) }}
+      <div class="summary-value" :class="gainType(tRealizedGainTotal) === 'success' ? 'gain-positive' : gainType(tRealizedGainTotal) === 'error' ? 'gain-negative' : ''">
+        {{ fmt(tRealizedGainTotal) }}
       </div>
     </div>
   </NCard>

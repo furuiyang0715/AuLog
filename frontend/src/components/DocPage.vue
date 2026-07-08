@@ -78,7 +78,7 @@ const exampleSelled = [
 
           <h3>4. 两种获利路径</h3>
           <ul>
-            <li><strong>倒 T 闭环</strong>：卖价 − 买回成本，状态变为「已闭环」后计入已实现 gain。</li>
+            <li><strong>倒 T 套利</strong>：已配对部分的 gain（部分配对、已闭环均计入已实现）。</li>
             <li><strong>反弹卖出</strong>：从 ing 直接按更高价卖出，不经过倒 T 抵消，单独记 selled gain。</li>
           </ul>
 
@@ -192,7 +192,7 @@ const exampleSelled = [
           <h2>统计页说明</h2>
           <ul>
             <li>
-              <strong>倒 T 获利（已闭环）</strong>：仅 CLOSED 记录的 gain 之和
+              <strong>倒 T 已实现获利</strong>：全部倒 T 的 gain 之和（含部分配对、已闭环；待买回为 0）
             </li>
             <li>
               <strong>反弹卖出获利</strong>：全部 selled 的 gain 之和
