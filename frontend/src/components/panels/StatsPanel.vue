@@ -3,12 +3,14 @@ import { computed, inject, onMounted, ref } from "vue";
 import { NButton, NCard, NSpin, useMessage } from "naive-ui";
 import { api } from "../../api/client";
 import { fmt, gainType } from "../../utils/format";
+import GoldTrendModal from "../GoldTrendModal.vue";
 
 const ledger = inject("ledger");
 const message = useMessage();
 
 const goldLoading = ref(false);
 const goldPrice = ref(null);
+const showTrend = ref(false);
 
 const tRealizedGain = computed(() =>
   ledger.tRecords.value.reduce((sum, r) => sum + (Number(r.gain) || 0), 0)
@@ -115,9 +117,12 @@ onMounted(() => {
 
   <NCard title="当前金价" :bordered="false" class="section-card">
     <template #header-extra>
-      <NButton size="small" quaternary :loading="goldLoading" @click="loadGoldPrice(true)">
-        刷新
-      </NButton>
+      <div class="gold-header-actions">
+        <NButton size="small" quaternary @click="showTrend = true">趋势</NButton>
+        <NButton size="small" quaternary :loading="goldLoading" @click="loadGoldPrice(true)">
+          刷新
+        </NButton>
+      </div>
     </template>
 
     <NSpin :show="goldLoading && !goldPrice">
@@ -158,6 +163,8 @@ onMounted(() => {
       <p v-else-if="!goldLoading" class="hint-text">暂无金价数据</p>
     </NSpin>
   </NCard>
+
+  <GoldTrendModal v-model:show="showTrend" />
 
   <NCard title="现价预估" :bordered="false" class="section-card">
     <p class="hint-text estimate-intro">
@@ -227,6 +234,12 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.gold-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .gold-panel {

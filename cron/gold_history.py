@@ -31,6 +31,44 @@ def save_price_record(
     )
 
 
+def get_day_history(db: Database, label: str, day: str) -> dict[str, Any]:
+    rows = list(
+        db[COLLECTION].find({"label": label, "date": day}).sort("sampled_at", 1)
+    )
+    if not rows:
+        return {
+            "label": label,
+            "date": day,
+            "points": [],
+            "summary": None,
+        }
+
+    points: list[dict[str, Any]] = []
+    prices: list[float] = []
+    for row in rows:
+        price = float(row["price"])
+        prices.append(price)
+        sampled_at = row["sampled_at"]
+        if isinstance(sampled_at, datetime):
+            time_str = sampled_at.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            time_str = str(sampled_at)
+        points.append({"time": time_str, "price": price})
+
+    return {
+        "label": label,
+        "date": day,
+        "points": points,
+        "summary": {
+            "count": len(prices),
+            "high": max(prices),
+            "low": min(prices),
+            "open": prices[0],
+            "close": prices[-1],
+        },
+    }
+
+
 def get_today_stats(db: Database, label: str) -> dict[str, Any] | None:
     today = date.today().strftime("%Y-%m-%d")
     rows = list(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -18,6 +19,13 @@ from app.auth import get_current_user as auth_get_current_user
 from app.backup import export_user_data, import_user_data, parse_backup_json
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
+from cron.gold_history import get_day_history
+
+GOLD_HISTORY_LABELS = {"浙商黄金", "伦敦金"}
+GOLD_HISTORY_UNITS = {
+    "浙商黄金": "元/克",
+    "伦敦金": "美元/盎司",
+}
 
 app = FastAPI(title="AuLog", version="0.2.0")
 
@@ -72,6 +80,16 @@ def serialize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def round2(value: float) -> float:
     return round(value, 2)
+
+
+def _is_valid_date(value: str) -> bool:
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return False
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        return False
+    return True
 
 
 def ing_allocated_count(ing_id: ObjectId, allocations: Collection) -> float:
@@ -658,6 +676,24 @@ def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
 # ---------------------------------------------------------------------------
 # Routes — 统计
 # ---------------------------------------------------------------------------
+
+
+@app.get("/api/stats/gold-price/history")
+def get_gold_price_history(
+    date: str,
+    label: str = "浙商黄金",
+    uid: ObjectId = Depends(user_id),
+):
+    del uid
+    if not _is_valid_date(date):
+        raise HTTPException(status_code=400, detail="date 格式应为 YYYY-MM-DD")
+    if label not in GOLD_HISTORY_LABELS:
+        raise HTTPException(status_code=400, detail=f"不支持的品种: {label}")
+
+    db = get_db()
+    payload = get_day_history(db, label, date)
+    payload["unit"] = GOLD_HISTORY_UNITS[label]
+    return payload
 
 
 @app.get("/api/stats/gold-price")
