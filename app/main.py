@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 from typing import Any, Optional
+from urllib.parse import quote
 
 import requests
 from bson import ObjectId
@@ -712,6 +713,14 @@ def get_gold_price(refresh: bool = False, uid: ObjectId = Depends(user_id)):
 # ---------------------------------------------------------------------------
 
 
+def _content_disposition_attachment(filename: str) -> str:
+    """HTTP 头只能用 latin-1；中文用户名需用 RFC 5987 的 filename*。"""
+    ascii_name = filename.encode("ascii", "ignore").decode("ascii") or "aulog-backup.json"
+    ascii_name = ascii_name.replace('"', "").replace("\\", "")
+    utf8_name = quote(filename, safe="")
+    return f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{utf8_name}"
+
+
 @app.get("/api/data/export")
 def export_data(
     current_user: dict[str, Any] = Depends(auth_get_current_user),
@@ -722,7 +731,7 @@ def export_data(
     filename = f"aulog-backup-{current_user['username']}-{datetime.utcnow():%Y%m%d-%H%M%S}.json"
     return JSONResponse(
         content=payload,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _content_disposition_attachment(filename)},
     )
 
 

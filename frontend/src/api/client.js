@@ -77,8 +77,18 @@ export async function apiDownload(path, fallbackFilename = "aulog-backup.json") 
 
   const blob = await res.blob();
   const disposition = res.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="([^"]+)"/);
-  const filename = match?.[1] || fallbackFilename;
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  const asciiMatch = disposition.match(/filename="([^"]+)"/);
+  let filename = fallbackFilename;
+  if (utf8Match?.[1]) {
+    try {
+      filename = decodeURIComponent(utf8Match[1]);
+    } catch {
+      filename = asciiMatch?.[1] || fallbackFilename;
+    }
+  } else if (asciiMatch?.[1]) {
+    filename = asciiMatch[1];
+  }
 
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
