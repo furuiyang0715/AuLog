@@ -19,17 +19,26 @@ const props = defineProps({
 
 const emit = defineEmits(["update:show"]);
 
+const MAX_RANGE_DAYS = 7;
+
 const message = useMessage();
 const chartRef = ref(null);
 const loading = ref(false);
 const history = ref(null);
-const selectedDate = ref(startOfToday());
+const selectedRange = ref(todayRange());
+const lastValidRange = ref(todayRange());
 const selectedLabel = ref("浙商黄金");
 
 const labelOptions = [
   { label: "浙商黄金", value: "浙商黄金" },
   { label: "伦敦金", value: "伦敦金" },
 ];
+
+const rangeShortcuts = {
+  今天: () => todayRange(),
+  近3天: () => recentRange(3),
+  近7天: () => recentRange(7),
+};
 
 let chartInstance = null;
 let resizeObserver = null;
@@ -38,6 +47,35 @@ function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+function todayRange() {
+  const today = startOfToday();
+  return [today, today];
+}
+
+function recentRange(days) {
+  const end = startOfToday();
+  const start = end - (days - 1) * 24 * 60 * 60 * 1000;
+  return [start, end];
+}
+
+function rangeDayCount(startTs, endTs) {
+  if (!startTs || !endTs) return 0;
+  return Math.floor((endTs - startTs) / (24 * 60 * 60 * 1000)) + 1;
+}
+
+function formatRangeLabel(startTs, endTs) {
+  const start = toDateString(startTs);
+  const end = toDateString(endTs);
+  if (!start || !end) return "";
+  return start === end ? start : `${start} ~ ${end}`;
+}
+
+function formatAxisLabel(timeStr, isSingleDay) {
+  if (!timeStr) return "";
+  if (isSingleDay) return timeStr.slice(11, 16);
+  return `${timeStr.slice(5, 10)} ${timeStr.slice(11, 16)}`;
 }
 
 function closeModal() {
@@ -69,15 +107,24 @@ function renderChart() {
     resizeObserver.observe(chartRef.value);
   }
 
-  const times = points.map((p) => p.time.slice(11, 16));
+  const startDate = history.value?.start_date;
+  const endDate = history.value?.end_date;
+  const isSingleDay = startDate && endDate && startDate === endDate;
+  const times = points.map((p) => formatAxisLabel(p.time, isSingleDay));
   const prices = points.map((p) => p.price);
   const unit = history.value?.unit || "元/克";
   const summary = history.value?.summary;
+  const useDataZoom = points.length > 48;
 
   chartInstance.setOption(
     {
       animation: false,
-      grid: { left: 56, right: 20, top: 24, bottom: 48 },
+      grid: {
+        left: 56,
+        right: 20,
+        top: 24,
+        bottom: useDataZoom ? 72 : 48,
+      },
       tooltip: {
         trigger: "axis",
         backgroundColor: "rgba(26, 29, 35, 0.95)",
@@ -89,12 +136,36 @@ function renderChart() {
           return `${point.time}<br/>${fmt(item.data)} ${unit}`;
         },
       },
+      dataZoom: useDataZoom
+        ? [
+            {
+              type: "inside",
+              start: 0,
+              end: 100,
+            },
+            {
+              type: "slider",
+              start: 0,
+              end: 100,
+              height: 18,
+              bottom: 8,
+              borderColor: "#2e3340",
+              fillerColor: "rgba(212, 168, 83, 0.15)",
+              handleStyle: { color: "#d4a853" },
+              textStyle: { color: "#8b929e", fontSize: 10 },
+            },
+          ]
+        : undefined,
       xAxis: {
         type: "category",
         data: times,
         boundaryGap: false,
         axisLine: { lineStyle: { color: "#2e3340" } },
-        axisLabel: { color: "#8b929e", fontSize: 11 },
+        axisLabel: {
+          color: "#8b929e",
+          fontSize: 11,
+          hideOverlap: true,
+        },
         axisTick: { show: false },
       },
       yAxis: {
@@ -140,14 +211,33 @@ function renderChart() {
   );
 }
 
+function validateRange(range) {
+  if (!Array.isArray(range) || range.length !== 2 || !range[0] || !range[1]) {
+    return false;
+  }
+  if (range[0] > range[1]) {
+    message.warning("开始日期不能晚于结束日期");
+    return false;
+  }
+  if (rangeDayCount(range[0], range[1]) > MAX_RANGE_DAYS) {
+    message.warning(`查询范围不能超过 ${MAX_RANGE_DAYS} 天`);
+    return false;
+  }
+  return true;
+}
+
 async function loadHistory() {
-  const dateStr = toDateString(selectedDate.value);
-  if (!dateStr) return;
+  const [startTs, endTs] = selectedRange.value || [];
+  const startDate = toDateString(startTs);
+  const endDate = toDateString(endTs);
+  if (!startDate || !endDate) return;
+  if (!validateRange(selectedRange.value)) return;
 
   loading.value = true;
   try {
     const query = new URLSearchParams({
-      date: dateStr,
+      start_date: startDate,
+      end_date: endDate,
       label: selectedLabel.value,
     });
     history.value = await api(`/stats/gold-price/history?${query.toString()}`);
@@ -166,9 +256,10 @@ watch(
   () => props.show,
   (visible) => {
     if (visible) {
-      selectedDate.value = startOfToday();
+      const range = todayRange();
+      selectedRange.value = range;
+      lastValidRange.value = [...range];
       selectedLabel.value = "浙商黄金";
-      loadHistory();
       return;
     }
     disposeChart();
@@ -176,10 +267,14 @@ watch(
   }
 );
 
-watch([selectedDate, selectedLabel], () => {
-  if (props.show) {
-    loadHistory();
+watch([selectedRange, selectedLabel], () => {
+  if (!props.show) return;
+  if (!validateRange(selectedRange.value)) {
+    selectedRange.value = [...lastValidRange.value];
+    return;
   }
+  lastValidRange.value = [...selectedRange.value];
+  loadHistory();
 });
 
 onBeforeUnmount(disposeChart);
@@ -196,10 +291,11 @@ onBeforeUnmount(disposeChart);
     <NSpace vertical :size="16">
       <div class="toolbar">
         <NDatePicker
-          v-model:value="selectedDate"
-          type="date"
+          v-model:value="selectedRange"
+          type="daterange"
+          :shortcuts="rangeShortcuts"
           :input-readonly="true"
-          style="width: 180px"
+          style="width: 280px"
         />
         <NSelect
           v-model:value="selectedLabel"
@@ -211,6 +307,14 @@ onBeforeUnmount(disposeChart);
 
       <NSpin :show="loading">
         <div v-if="history?.summary" class="summary-row">
+          <span class="range-label">
+            {{
+              formatRangeLabel(
+                selectedRange?.[0],
+                selectedRange?.[1]
+              )
+            }}
+          </span>
           <span>采样 {{ history.summary.count }} 次</span>
           <span>开 {{ fmt(history.summary.open) }}</span>
           <span>收 {{ fmt(history.summary.close) }}</span>
@@ -222,7 +326,8 @@ onBeforeUnmount(disposeChart);
         <div v-if="history?.points?.length" ref="chartRef" class="chart-box" />
 
         <p v-else-if="!loading" class="empty-text">
-          {{ history?.date || toDateString(selectedDate) }} 暂无 {{ selectedLabel }} 采样记录
+          {{ formatRangeLabel(selectedRange?.[0], selectedRange?.[1]) }}
+          暂无 {{ selectedLabel }} 采样记录
         </p>
       </NSpin>
     </NSpace>
@@ -248,6 +353,11 @@ onBeforeUnmount(disposeChart);
   margin-bottom: 0.75rem;
   font-size: 0.85rem;
   color: #c4c8cf;
+}
+
+.range-label {
+  color: #d4a853;
+  font-weight: 600;
 }
 
 .unit {

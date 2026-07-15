@@ -31,14 +31,17 @@ def save_price_record(
     )
 
 
-def get_day_history(db: Database, label: str, day: str) -> dict[str, Any]:
-    rows = list(
-        db[COLLECTION].find({"label": label, "date": day}).sort("sampled_at", 1)
-    )
+def _rows_to_history(
+    label: str,
+    start_date: str,
+    end_date: str,
+    rows: list[dict[str, Any]],
+) -> dict[str, Any]:
     if not rows:
         return {
             "label": label,
-            "date": day,
+            "start_date": start_date,
+            "end_date": end_date,
             "points": [],
             "summary": None,
         }
@@ -57,7 +60,8 @@ def get_day_history(db: Database, label: str, day: str) -> dict[str, Any]:
 
     return {
         "label": label,
-        "date": day,
+        "start_date": start_date,
+        "end_date": end_date,
         "points": points,
         "summary": {
             "count": len(prices),
@@ -67,6 +71,29 @@ def get_day_history(db: Database, label: str, day: str) -> dict[str, Any]:
             "close": prices[-1],
         },
     }
+
+
+def get_day_history(db: Database, label: str, day: str) -> dict[str, Any]:
+    rows = list(
+        db[COLLECTION].find({"label": label, "date": day}).sort("sampled_at", 1)
+    )
+    payload = _rows_to_history(label, day, day, rows)
+    payload["date"] = day
+    return payload
+
+
+def get_range_history(
+    db: Database,
+    label: str,
+    start_date: str,
+    end_date: str,
+) -> dict[str, Any]:
+    rows = list(
+        db[COLLECTION]
+        .find({"label": label, "date": {"$gte": start_date, "$lte": end_date}})
+        .sort("sampled_at", 1)
+    )
+    return _rows_to_history(label, start_date, end_date, rows)
 
 
 def get_today_stats(db: Database, label: str) -> dict[str, Any] | None:

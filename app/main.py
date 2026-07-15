@@ -20,7 +20,7 @@ from app.auth import get_current_user as auth_get_current_user
 from app.backup import export_user_data, import_user_data, parse_backup_json
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
-from cron.gold_history import get_day_history
+from cron.gold_history import get_range_history
 
 GOLD_HISTORY_LABELS = {"浙商黄金", "伦敦金"}
 GOLD_HISTORY_UNITS = {
@@ -679,20 +679,38 @@ def delete_allocation(allocation_id: str, uid: ObjectId = Depends(user_id)):
 # ---------------------------------------------------------------------------
 
 
+MAX_GOLD_HISTORY_DAYS = 7
+
+
+def _parse_date(value: str) -> datetime:
+    return datetime.strptime(value, "%Y-%m-%d")
+
+
 @app.get("/api/stats/gold-price/history")
 def get_gold_price_history(
-    date: str,
+    start_date: str,
+    end_date: str,
     label: str = "浙商黄金",
     uid: ObjectId = Depends(user_id),
 ):
     del uid
-    if not _is_valid_date(date):
-        raise HTTPException(status_code=400, detail="date 格式应为 YYYY-MM-DD")
+    if not _is_valid_date(start_date) or not _is_valid_date(end_date):
+        raise HTTPException(status_code=400, detail="日期格式应为 YYYY-MM-DD")
     if label not in GOLD_HISTORY_LABELS:
         raise HTTPException(status_code=400, detail=f"不支持的品种: {label}")
 
+    start = _parse_date(start_date)
+    end = _parse_date(end_date)
+    if start > end:
+        raise HTTPException(status_code=400, detail="start_date 不能晚于 end_date")
+    if (end - start).days + 1 > MAX_GOLD_HISTORY_DAYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"查询范围不能超过 {MAX_GOLD_HISTORY_DAYS} 天",
+        )
+
     db = get_db()
-    payload = get_day_history(db, label, date)
+    payload = get_range_history(db, label, start_date, end_date)
     payload["unit"] = GOLD_HISTORY_UNITS[label]
     return payload
 
