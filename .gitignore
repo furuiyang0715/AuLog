@@ -7,6 +7,10 @@ venv/
 *.xlsx
 q.md
 
+# Runtime logs (supervisor / cron on server)
+logs/
+*.log
+
 # Frontend
 frontend/node_modules/
 static/dist/
