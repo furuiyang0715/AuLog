@@ -27,6 +27,12 @@ export function parseLegacyDate(value) {
   return null;
 }
 
+export function compareLegacyDate(a, b) {
+  const ta = parseLegacyDate(a) ?? Number.MAX_SAFE_INTEGER;
+  const tb = parseLegacyDate(b) ?? Number.MAX_SAFE_INTEGER;
+  return ta - tb;
+}
+
 export function toDateString(timestamp) {
   if (!timestamp) return null;
   const d = new Date(timestamp);

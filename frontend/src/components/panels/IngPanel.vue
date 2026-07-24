@@ -18,7 +18,7 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString } from "../../utils/format";
+import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -154,7 +154,12 @@ function hStatus(status) {
 }
 
 const columns = [
-  { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
+  {
+    title: "日期",
+    key: "date",
+    sorter: (a, b) => compareLegacyDate(a.date, b.date),
+    render: (r) => formatDateDisplay(r.date),
+  },
   { title: "备注", key: "mark", render: renderMark },
   {
     title: "单价",

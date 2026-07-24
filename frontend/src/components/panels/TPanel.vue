@@ -17,7 +17,7 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString } from "../../utils/format";
+import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -177,7 +177,12 @@ function actionButtons(r) {
 
 const columns = [
   { title: "备注", key: "mark", render: renderMark },
-  { title: "卖出日期", key: "sold_at", render: (r) => formatDateDisplay(r.sold_at) },
+  {
+    title: "卖出日期",
+    key: "sold_at",
+    sorter: (a, b) => compareLegacyDate(a.sold_at, b.sold_at),
+    render: (r) => formatDateDisplay(r.sold_at),
+  },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },
   { title: "回笼", key: "pop_amount", render: (r) => fmt(r.pop_amount) },
   {
