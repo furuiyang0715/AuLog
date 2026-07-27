@@ -90,7 +90,7 @@ function logout() {
       </div>
     </NLayoutHeader>
 
-    <NLayoutContent>
+    <NLayoutContent class="app-content">
       <NSpin :show="auth.loading.value">
         <DocPage
           v-if="!auth.user.value && !auth.loading.value"
@@ -135,7 +135,7 @@ function logout() {
 
 .app-header {
   background: linear-gradient(135deg, #1a1d23 0%, #2a2418 100%);
-  padding: 1.25rem 1.5rem;
+  padding: 1.25rem clamp(1rem, 2.5vw, 2.5rem);
 }
 
 .header-inner {
@@ -143,8 +143,9 @@ function logout() {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  max-width: 1100px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
 }
 
 .header-inner h1 {
@@ -168,11 +169,20 @@ function logout() {
   font-size: 0.875rem;
 }
 
+.app-content {
+  width: 100%;
+}
+
+.app-content :deep(.n-spin-container),
+.app-content :deep(.n-spin-content) {
+  width: 100%;
+}
+
 .content-shell {
   width: 100%;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
+  max-width: none;
+  margin: 0;
+  padding: 0 clamp(1rem, 2.5vw, 2.5rem);
   box-sizing: border-box;
 }
 
@@ -188,6 +198,11 @@ function logout() {
 .main-tabs :deep(.n-tabs-pane-wrapper) {
   width: 100%;
   overflow: visible;
+}
+
+.main-tabs :deep(.n-tabs-nav-scroll-wrapper),
+.main-tabs :deep(.n-tabs-nav-scroll-content) {
+  width: 100%;
 }
 
 .main-tabs :deep(.n-tab-pane) {

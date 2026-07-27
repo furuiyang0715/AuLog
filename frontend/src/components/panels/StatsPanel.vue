@@ -61,6 +61,44 @@ const expectedNetDiff = computed(() => {
   return round2(expectedBuybackGain.value + expectedSellGain.value);
 });
 
+const unsettledSellAvg = computed(() =>
+  weightedAvgPrice(
+    ledger.tRecords.value
+      .filter((r) => r.status !== "CLOSED" && Number(r.remaining_count) > 0)
+      .map((r) => ({ price: r.price, count: r.remaining_count }))
+  )
+);
+
+const unsettledBuyAvg = computed(() =>
+  weightedAvgPrice(
+    ledger.ingRecords.value
+      .filter((r) => Number(r.remaining_count) > 0)
+      .map((r) => ({ price: r.price, count: r.remaining_count }))
+  )
+);
+
+const unsettledSellTotal = computed(() =>
+  ledger.tRecords.value
+    .filter((r) => r.status !== "CLOSED" && Number(r.remaining_count) > 0)
+    .reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
+);
+
+const unsettledBuyTotal = computed(() =>
+  ledger.ingRecords.value
+    .filter((r) => Number(r.remaining_count) > 0)
+    .reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
+);
+
+function weightedAvgPrice(rows) {
+  const totalWeight = rows.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
+  if (totalWeight <= 0) return null;
+  const weightedSum = rows.reduce(
+    (sum, r) => sum + (Number(r.price) || 0) * (Number(r.count) || 0),
+    0
+  );
+  return round2(weightedSum / totalWeight);
+}
+
 function round2(value) {
   return Math.round(value * 100) / 100;
 }
@@ -166,6 +204,32 @@ onMounted(() => {
 
   <GoldTrendModal v-model:show="showTrend" />
 
+  <NCard title="未结均价" :bordered="false" class="section-card">
+    <p class="hint-text estimate-intro">
+      按剩余克数加权：未闭合倒 T 的卖出均价、未分完进货的买入均价。
+    </p>
+    <div class="stats-grid">
+      <div class="stat-item summary-card">
+        <div class="summary-label">未结卖出均价</div>
+        <div class="hint-text">
+          倒 T 未闭合 · 剩余 {{ fmt(unsettledSellTotal) }} 克
+        </div>
+        <div class="summary-value summary-price">
+          {{ unsettledSellAvg == null ? "—" : fmt(unsettledSellAvg) }}
+        </div>
+      </div>
+      <div class="stat-item summary-card">
+        <div class="summary-label">未结买入均价</div>
+        <div class="hint-text">
+          进货未分完 · 剩余 {{ fmt(unsettledBuyTotal) }} 克
+        </div>
+        <div class="summary-value summary-price">
+          {{ unsettledBuyAvg == null ? "—" : fmt(unsettledBuyAvg) }}
+        </div>
+      </div>
+    </div>
+  </NCard>
+
   <NCard title="现价预估" :bordered="false" class="section-card">
     <p class="hint-text estimate-intro">
       按上方当前金价估算：若未闭合倒 T 现在买回、未分配进货现在卖出，各自的浮动盈亏（可为负，作操作参考）。
@@ -234,6 +298,10 @@ onMounted(() => {
   font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.summary-price {
+  color: #d4a853;
 }
 
 .gold-header-actions {
