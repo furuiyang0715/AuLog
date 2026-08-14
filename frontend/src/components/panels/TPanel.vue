@@ -25,7 +25,7 @@ const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
 
-const onlyUnclosed = ref(true);
+const onlyUnclosed = ref(false);
 
 const tableRecords = computed(() => {
   const rows = ledger.tRecords.value;
@@ -181,6 +181,7 @@ const columns = [
     title: "卖出日期",
     key: "sold_at",
     sorter: (a, b) => compareLegacyDate(a.sold_at, b.sold_at),
+    defaultSortOrder: "descend",
     render: (r) => formatDateDisplay(r.sold_at),
   },
   { title: "克数", key: "count", render: (r) => fmt(r.count) },

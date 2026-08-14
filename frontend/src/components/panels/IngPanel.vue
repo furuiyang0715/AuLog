@@ -26,7 +26,7 @@ const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
 
-const onlyIncomplete = ref(true);
+const onlyIncomplete = ref(false);
 
 const tableRecords = computed(() => {
   const rows = ledger.ingRecords.value;
@@ -158,6 +158,7 @@ const columns = [
     title: "日期",
     key: "date",
     sorter: (a, b) => compareLegacyDate(a.date, b.date),
+    defaultSortOrder: "descend",
     render: (r) => formatDateDisplay(r.date),
   },
   { title: "备注", key: "mark", render: renderMark },
