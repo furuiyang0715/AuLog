@@ -93,6 +93,34 @@ def _is_valid_date(value: str) -> bool:
     return True
 
 
+_RECORD_DATETIME_FORMATS = (
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%d",
+)
+
+
+def parse_record_datetime_ts(value: Any) -> float:
+    if not value or not isinstance(value, str):
+        return 0.0
+    text = value.strip()
+    for fmt in _RECORD_DATETIME_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).timestamp()
+        except ValueError:
+            continue
+    if len(text) == 4 and text.isdigit():
+        try:
+            year = datetime.utcnow().year
+            return datetime.strptime(f"{year}{text}", "%Y%m%d").timestamp()
+        except ValueError:
+            pass
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
 def ing_allocated_count(ing_id: ObjectId, allocations: Collection) -> float:
     total = 0.0
     for row in allocations.find({"ing_id": ing_id}):
@@ -141,26 +169,13 @@ def enrich_t(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
 
 
 def t_record_sort_ts(item: dict[str, Any]) -> float:
-    sold_at = item.get("sold_at")
-    if sold_at and isinstance(sold_at, str):
-        if len(sold_at) == 10 and sold_at[4] == "-":
-            try:
-                return datetime.strptime(sold_at, "%Y-%m-%d").timestamp()
-            except ValueError:
-                pass
-        if len(sold_at) == 4 and sold_at.isdigit():
-            try:
-                year = datetime.utcnow().year
-                return datetime.strptime(f"{year}{sold_at}", "%Y%m%d").timestamp()
-            except ValueError:
-                pass
+    ts = parse_record_datetime_ts(item.get("sold_at"))
+    if ts:
+        return ts
     for field in ("updated_at", "created_at"):
-        val = item.get(field)
-        if val and isinstance(val, str):
-            try:
-                return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
-            except ValueError:
-                pass
+        ts = parse_record_datetime_ts(item.get(field))
+        if ts:
+            return ts
     return 0.0
 
 
@@ -176,26 +191,13 @@ def sort_t_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def ing_record_sort_ts(item: dict[str, Any]) -> float:
-    date = item.get("date")
-    if date and isinstance(date, str):
-        if len(date) == 10 and date[4] == "-":
-            try:
-                return datetime.strptime(date, "%Y-%m-%d").timestamp()
-            except ValueError:
-                pass
-        if len(date) == 4 and date.isdigit():
-            try:
-                year = datetime.utcnow().year
-                return datetime.strptime(f"{year}{date}", "%Y%m%d").timestamp()
-            except ValueError:
-                pass
+    ts = parse_record_datetime_ts(item.get("date"))
+    if ts:
+        return ts
     for field in ("updated_at", "created_at"):
-        val = item.get(field)
-        if val and isinstance(val, str):
-            try:
-                return datetime.fromisoformat(val.replace("Z", "+00:00")).timestamp()
-            except ValueError:
-                pass
+        ts = parse_record_datetime_ts(item.get(field))
+        if ts:
+            return ts
     return 0.0
 
 

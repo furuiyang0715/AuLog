@@ -24,6 +24,10 @@ function fmt(n) {
 
 function formatDateDisplay(value) {
   if (!value) return "—";
+  const dt = String(value).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+  if (dt) {
+    return `${dt[1]}/${dt[2]}/${dt[3]} ${dt[4]}:${dt[5]}:${dt[6]}`;
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const [y, m, d] = value.split("-");
     return `${y}/${m}/${d}`;

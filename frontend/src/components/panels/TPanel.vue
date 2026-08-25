@@ -17,7 +17,7 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, compareLegacyDate } from "../../utils/format";
+import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -49,7 +49,7 @@ const form = ref({
   mark: "",
   count: null,
   pop_amount: null,
-  sold_at: null,
+  sold_at: Date.now(),
 });
 
 const showEdit = ref(false);
@@ -138,7 +138,7 @@ function renderPriceDiff(row) {
 }
 
 const linkedColumns = [
-  { title: "进货日期", key: "ingDate", render: (r) => formatDateDisplay(r.ingDate) },
+  { title: "进货日期", key: "ingDate", minWidth: 168, render: (r) => formatDateDisplay(r.ingDate) },
   { title: "备注", key: "ingMark" },
   { title: "买入价", key: "buyPrice", render: (r) => fmt(r.buyPrice) },
   { title: "配对克数", key: "matchCount", render: (r) => fmt(r.matchCount) },
@@ -180,6 +180,7 @@ const columns = [
   {
     title: "卖出日期",
     key: "sold_at",
+    minWidth: 168,
     sorter: (a, b) => compareLegacyDate(a.sold_at, b.sold_at),
     defaultSortOrder: "descend",
     render: (r) => formatDateDisplay(r.sold_at),
@@ -213,9 +214,9 @@ async function submit() {
       mark: form.value.mark,
       count: form.value.count,
       pop_amount: form.value.pop_amount,
-      sold_at: form.value.sold_at ? toDateString(form.value.sold_at) : null,
+      sold_at: form.value.sold_at ? toDateTimeString(form.value.sold_at) : null,
     });
-    form.value = { mark: "", count: null, pop_amount: null, sold_at: null };
+    form.value = { mark: "", count: null, pop_amount: null, sold_at: Date.now() };
     message.success("倒 T 记录已添加");
   } catch (err) {
     message.error(err.message);
@@ -248,7 +249,7 @@ async function submitEdit() {
       mark: editForm.value.mark,
       count: editForm.value.count,
       pop_amount: editForm.value.pop_amount,
-      sold_at: editForm.value.sold_at ? toDateString(editForm.value.sold_at) : null,
+      sold_at: editForm.value.sold_at ? toDateTimeString(editForm.value.sold_at) : null,
     });
     showEdit.value = false;
     message.success("已保存");
@@ -298,7 +299,8 @@ function onDelete(id) {
           <NFormItem label="卖出日期">
             <NDatePicker
               v-model:value="form.sold_at"
-              type="date"
+              type="datetime"
+              format="yyyy-MM-dd HH:mm:ss"
               clearable
               class="full-width"
               :input-readonly="true"
@@ -374,7 +376,8 @@ function onDelete(id) {
       <NFormItem label="卖出日期">
         <NDatePicker
           v-model:value="editForm.sold_at"
-          type="date"
+          type="datetime"
+          format="yyyy-MM-dd HH:mm:ss"
           clearable
           class="full-width"
           :input-readonly="true"

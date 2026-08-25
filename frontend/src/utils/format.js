@@ -6,23 +6,40 @@ export function fmt(n) {
   });
 }
 
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/;
+const LEGACY_MMDD = /^\d{4}$/;
+
+function pad(n) {
+  return String(n).padStart(2, "0");
+}
+
 export function formatDateDisplay(value) {
   if (!value) return "—";
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const [y, m, d] = value.split("-");
-    return `${y}/${m}/${d}`;
+  const dt = DATE_TIME.exec(value);
+  if (dt) {
+    return `${dt[1]}/${dt[2]}/${dt[3]} ${dt[4]}:${dt[5]}:${dt[6]}`;
+  }
+  const day = DATE_ONLY.exec(value);
+  if (day) {
+    return `${day[1]}/${day[2]}/${day[3]}`;
   }
   return String(value);
 }
 
 export function parseLegacyDate(value) {
   if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return new Date(`${value}T00:00:00`).getTime();
+  const dt = DATE_TIME.exec(value);
+  if (dt) {
+    return new Date(+dt[1], +dt[2] - 1, +dt[3], +dt[4], +dt[5], +dt[6]).getTime();
   }
-  if (/^\d{4}$/.test(value)) {
+  const day = DATE_ONLY.exec(value);
+  if (day) {
+    return new Date(+day[1], +day[2] - 1, +day[3]).getTime();
+  }
+  if (LEGACY_MMDD.test(value)) {
     const year = new Date().getFullYear();
-    return new Date(`${year}-${value.slice(0, 2)}-${value.slice(2, 4)}T00:00:00`).getTime();
+    return new Date(year, +value.slice(0, 2) - 1, +value.slice(2, 4)).getTime();
   }
   return null;
 }
@@ -36,10 +53,13 @@ export function compareLegacyDate(a, b) {
 export function toDateString(timestamp) {
   if (!timestamp) return null;
   const d = new Date(timestamp);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function toDateTimeString(timestamp) {
+  if (!timestamp) return null;
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
 export const statusMap = {

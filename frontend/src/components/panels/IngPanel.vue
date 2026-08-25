@@ -18,7 +18,7 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, compareLegacyDate } from "../../utils/format";
+import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -41,7 +41,7 @@ const ingUnclosedTotal = computed(() =>
 );
 
 const form = ref({
-  date: null,
+  date: Date.now(),
   mark: "",
   price: null,
   count: null,
@@ -129,7 +129,7 @@ function renderPriceDiff(row) {
 }
 
 const linkedTColumns = [
-  { title: "卖出日期", key: "soldAt", render: (r) => formatDateDisplay(r.soldAt) },
+  { title: "卖出日期", key: "soldAt", minWidth: 168, render: (r) => formatDateDisplay(r.soldAt) },
   { title: "备注", key: "tMark" },
   { title: "卖价", key: "sellPrice", render: (r) => fmt(r.sellPrice) },
   { title: "配对克数", key: "matchCount", render: (r) => fmt(r.matchCount) },
@@ -157,6 +157,7 @@ const columns = [
   {
     title: "日期",
     key: "date",
+    minWidth: 168,
     sorter: (a, b) => compareLegacyDate(a.date, b.date),
     defaultSortOrder: "descend",
     render: (r) => formatDateDisplay(r.date),
@@ -233,13 +234,13 @@ async function submit() {
   }
   try {
     await ledger.createIng({
-      date: toDateString(form.value.date),
+      date: toDateTimeString(form.value.date),
       mark: form.value.mark,
       price: form.value.price,
       count: form.value.count,
       amount: form.value.amount,
     });
-    form.value = { date: null, mark: "", price: null, count: null, amount: null };
+    form.value = { date: Date.now(), mark: "", price: null, count: null, amount: null };
     message.success("进货记录已添加");
   } catch (err) {
     message.error(err.message);
@@ -299,7 +300,7 @@ async function submitEdit() {
   }
   try {
     await ledger.updateIng(editingId.value, {
-      date: toDateString(editForm.value.date),
+      date: toDateTimeString(editForm.value.date),
       mark: editForm.value.mark,
       price: editForm.value.price,
       count: editForm.value.count,
@@ -370,7 +371,13 @@ function onDelete(id) {
       <NGrid :cols="24" :x-gap="12" :y-gap="8" item-responsive responsive="screen">
         <NGridItem span="24 m:8">
           <NFormItem label="日期 date">
-            <NDatePicker v-model:value="form.date" type="date" class="full-width" :input-readonly="true" />
+            <NDatePicker
+              v-model:value="form.date"
+              type="datetime"
+              format="yyyy-MM-dd HH:mm:ss"
+              class="full-width"
+              :input-readonly="true"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
@@ -434,7 +441,13 @@ function onDelete(id) {
     </p>
     <NForm @submit.prevent="submitEdit">
       <NFormItem label="日期 date">
-        <NDatePicker v-model:value="editForm.date" type="date" class="full-width" :input-readonly="true" />
+        <NDatePicker
+          v-model:value="editForm.date"
+          type="datetime"
+          format="yyyy-MM-dd HH:mm:ss"
+          class="full-width"
+          :input-readonly="true"
+        />
       </NFormItem>
       <NFormItem label="备注 mark">
         <NInput v-model:value="editForm.mark" />
