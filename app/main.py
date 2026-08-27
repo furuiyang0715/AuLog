@@ -18,6 +18,7 @@ from pymongo.collection import Collection
 from app.auth import create_token, hash_password, user_id, verify_password
 from app.auth import get_current_user as auth_get_current_user
 from app.backup import export_user_data, import_user_data, parse_backup_json
+from app.book import router as book_router
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
 from cron.gold_history import get_range_history
@@ -36,14 +37,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(book_router)
 
 
 @app.on_event("startup")
 def ensure_indexes() -> None:
     db = get_db()
     db.users.create_index("username", unique=True)
-    for name in ("t_records", "ing_records", "selled_records", "ing_allocations"):
+    for name in (
+        "t_records",
+        "ing_records",
+        "selled_records",
+        "ing_allocations",
+        "book_projects",
+        "book_snapshots",
+    ):
         db[name].create_index("user_id")
+    db.book_snapshots.create_index([("user_id", 1), ("date", 1)], unique=True)
     db.gold_price_samples.create_index([("label", 1), ("date", 1)])
     db.gold_price_samples.create_index([("label", 1), ("sampled_at", -1)])
 

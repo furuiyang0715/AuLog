@@ -11,12 +11,17 @@ from pymongo.database import Database
 BACKUP_VERSION = 1
 BACKUP_APP = "AuLog"
 
-COLLECTIONS = (
+REQUIRED_COLLECTIONS = (
     "t_records",
     "ing_records",
     "selled_records",
     "ing_allocations",
 )
+OPTIONAL_COLLECTIONS = (
+    "book_projects",
+    "book_snapshots",
+)
+COLLECTIONS = REQUIRED_COLLECTIONS + OPTIONAL_COLLECTIONS
 
 ALLOWED_FIELDS: dict[str, tuple[str, ...]] = {
     "t_records": ("mark", "count", "pop_amount", "sold_at", "created_at", "updated_at"),
@@ -39,6 +44,8 @@ ALLOWED_FIELDS: dict[str, tuple[str, ...]] = {
         "amount",
         "created_at",
     ),
+    "book_projects": ("name", "created_at", "updated_at"),
+    "book_snapshots": ("date", "amounts", "created_at", "updated_at"),
 }
 
 
@@ -134,6 +141,10 @@ def _build_record(
             doc[key] = value
         elif key in ("count", "pop_amount", "price", "amount", "buy_price", "buy_amount", "sell_price", "sell_amount"):
             doc[key] = round(float(value), 2)
+        elif key == "name":
+            doc[key] = str(value).strip() if value is not None else ""
+        elif key == "amounts":
+            doc[key] = _remap_book_amounts(value, id_maps)
         elif key in ("mark", "date", "sold_at"):
             doc[key] = str(value).strip() if value is not None else ""
         else:
@@ -143,6 +154,24 @@ def _build_record(
     id_maps[collection][old_id] = new_id
     doc["_id"] = new_id
     return doc
+
+
+def _remap_book_amounts(value: Any, id_maps: dict[str, dict[str, ObjectId]]) -> dict[str, float]:
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=400, detail="book_snapshots.amounts 必须是对象")
+    remapped: dict[str, float] = {}
+    project_map = id_maps["book_projects"]
+    for old_id, amount in value.items():
+        if not isinstance(old_id, str):
+            raise HTTPException(status_code=400, detail="book_snapshots.amounts 的键必须是项目 id")
+        mapped = project_map.get(old_id)
+        if mapped is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"book_snapshots 引用了不存在的项目: {old_id}",
+            )
+        remapped[str(mapped)] = round(float(amount or 0), 2)
+    return remapped
 
 
 def _target_collection(record: dict[str, Any]) -> str:
@@ -169,11 +198,18 @@ def _validate_backup_payload(payload: Any) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise HTTPException(status_code=400, detail="备份缺少 data 字段")
 
-    for name in COLLECTIONS:
+    for name in REQUIRED_COLLECTIONS:
         rows = data.get(name)
         if rows is None:
             raise HTTPException(status_code=400, detail=f"备份缺少 data.{name}")
         if not isinstance(rows, list):
+            raise HTTPException(status_code=400, detail=f"data.{name} 必须是数组")
+
+    for name in OPTIONAL_COLLECTIONS:
+        rows = data.get(name)
+        if rows is None:
+            data[name] = []
+        elif not isinstance(rows, list):
             raise HTTPException(status_code=400, detail=f"data.{name} 必须是数组")
 
     return payload
@@ -206,13 +242,41 @@ def import_user_data(db: Database, uid: ObjectId, payload: dict[str, Any]) -> di
         else:
             raise HTTPException(status_code=400, detail=f"ing_allocations[{index}] target_type 无效")
 
+    snapshot_dates: set[str] = set()
+    project_ids = seen_ids["book_projects"]
+    for index, record in enumerate(data["book_snapshots"]):
+        day = record.get("date")
+        if not isinstance(day, str) or not day.strip():
+            raise HTTPException(status_code=400, detail=f"book_snapshots[{index}] 缺少 date")
+        if day in snapshot_dates:
+            raise HTTPException(status_code=400, detail=f"book_snapshots 存在重复日期: {day}")
+        snapshot_dates.add(day)
+        amounts = record.get("amounts")
+        if amounts is None:
+            continue
+        if not isinstance(amounts, dict):
+            raise HTTPException(status_code=400, detail=f"book_snapshots[{index}] amounts 必须是对象")
+        for project_id in amounts:
+            if project_id not in project_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"book_snapshots[{index}] 引用了不存在的项目: {project_id}",
+                )
+
     id_maps: dict[str, dict[str, ObjectId]] = {name: {} for name in COLLECTIONS}
 
     for name in COLLECTIONS:
         db[name].delete_many({"user_id": uid})
 
     counts: dict[str, int] = {}
-    insert_order = ("t_records", "ing_records", "selled_records", "ing_allocations")
+    insert_order = (
+        "t_records",
+        "ing_records",
+        "selled_records",
+        "ing_allocations",
+        "book_projects",
+        "book_snapshots",
+    )
     for collection in insert_order:
         docs = [
             _build_record(record, collection, uid, id_maps)

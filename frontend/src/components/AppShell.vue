@@ -19,6 +19,7 @@ import IngPanel from "./panels/IngPanel.vue";
 import SelledPanel from "./panels/SelledPanel.vue";
 import AllocPanel from "./panels/AllocPanel.vue";
 import StatsPanel from "./panels/StatsPanel.vue";
+import BookPanel from "./panels/BookPanel.vue";
 import DataPanel from "./panels/DataPanel.vue";
 
 const auth = useAuth();
@@ -68,6 +69,8 @@ function logout() {
   ledger.ingRecords.value = [];
   ledger.selledRecords.value = [];
   ledger.allocations.value = [];
+  ledger.bookProjects.value = [];
+  ledger.bookSnapshots.value = [];
   message.success("已退出登录");
 }
 </script>
@@ -115,6 +118,9 @@ function logout() {
               </NTabPane>
               <NTabPane name="stats" tab="统计">
                 <div class="page-container"><StatsPanel /></div>
+              </NTabPane>
+              <NTabPane name="book" tab="资产账本">
+                <div class="page-container"><BookPanel /></div>
               </NTabPane>
               <NTabPane name="backup" tab="存档">
                 <div class="page-container"><DataPanel /></div>

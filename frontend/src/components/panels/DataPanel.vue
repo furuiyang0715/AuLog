@@ -70,6 +70,8 @@ async function performImport(file) {
       `进货 ${counts.ing_records ?? 0} 条`,
       `selled ${counts.selled_records ?? 0} 条`,
       `分配 ${counts.ing_allocations ?? 0} 条`,
+      `资产项目 ${counts.book_projects ?? 0} 个`,
+      `资产日期 ${counts.book_snapshots ?? 0} 条`,
     ].join("，");
 
     if (
@@ -100,7 +102,7 @@ async function performImport(file) {
     <NCard title="导出存档" size="small">
       <NSpace vertical :size="12">
         <NText depth="3">
-          包含倒 T、进货、selled、分配记录，可用于换机迁移或本地备份。
+          包含倒 T、进货、selled、分配记录和资产账本，可用于换机迁移或本地备份。
         </NText>
         <NButton type="primary" :loading="exporting" @click="handleExport">
           下载备份文件
