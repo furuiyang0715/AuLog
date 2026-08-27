@@ -32,10 +32,11 @@ function startOfToday() {
 }
 
 const newProjectName = ref("");
-const editingNames = ref({});
+const detailName = ref("");
 const formDate = ref(startOfToday());
 const formAmounts = ref({});
 const savingDay = ref(false);
+const renaming = ref(false);
 const showDetail = ref(false);
 const selectedProject = ref(null);
 
@@ -94,17 +95,25 @@ function ensureProjectAmountKeys() {
 watch(
   projects,
   (list) => {
-    const names = {};
-    for (const project of list) {
-      names[project.id] = project.name;
-    }
-    editingNames.value = names;
     ensureProjectAmountKeys();
+    if (!selectedProject.value) return;
+    const updated = list.find((p) => p.id === selectedProject.value.id);
+    if (updated) {
+      selectedProject.value = updated;
+      if (!renaming.value) detailName.value = updated.name;
+    } else {
+      showDetail.value = false;
+      selectedProject.value = null;
+    }
   },
   { immediate: true }
 );
 
 watch(formDate, hydrateFromSnapshot);
+
+const selectedInUse = computed(
+  () => selectedProject.value != null && usedProjectIds.value.has(selectedProject.value.id)
+);
 
 const dayTotal = computed(() =>
   projects.value.reduce((sum, project) => {
@@ -130,9 +139,7 @@ const projectPoints = computed(() => {
   }));
 });
 
-const projectHistoryRows = computed(() =>
-  [...projectPoints.value].reverse()
-);
+const projectHistoryRows = computed(() => [...projectPoints.value].reverse());
 
 async function addProject() {
   const name = newProjectName.value.trim();
@@ -149,24 +156,31 @@ async function addProject() {
   }
 }
 
-async function renameProject(project) {
-  const name = (editingNames.value[project.id] || "").trim();
+async function renameSelected() {
+  const project = selectedProject.value;
+  if (!project) return;
+  const name = detailName.value.trim();
   if (!name) {
     message.warning("项目名称不能为空");
-    editingNames.value[project.id] = project.name;
+    detailName.value = project.name;
     return;
   }
   if (name === project.name) return;
+  renaming.value = true;
   try {
     await ledger.renameBookProject(project.id, name);
     message.success("已改名");
   } catch (err) {
-    editingNames.value[project.id] = project.name;
+    detailName.value = project.name;
     message.error(err.message);
+  } finally {
+    renaming.value = false;
   }
 }
 
-function onDeleteProject(project) {
+function onDeleteSelected() {
+  const project = selectedProject.value;
+  if (!project) return;
   if (usedProjectIds.value.has(project.id)) {
     message.warning("该项目已有金额记录，无法删除");
     return;
@@ -179,6 +193,8 @@ function onDeleteProject(project) {
     onPositiveClick: async () => {
       try {
         await ledger.deleteBookProject(project.id);
+        showDetail.value = false;
+        selectedProject.value = null;
         message.success("已删除");
       } catch (err) {
         message.error(err.message);
@@ -189,6 +205,7 @@ function onDeleteProject(project) {
 
 function openDetail(project) {
   selectedProject.value = project;
+  detailName.value = project.name;
   showDetail.value = true;
 }
 
@@ -222,47 +239,6 @@ function loadDay(row) {
   const ts = Date.parse(`${row.date}T00:00:00`);
   formDate.value = Number.isNaN(ts) ? startOfToday() : ts;
 }
-
-const projectColumns = [
-  {
-    title: "项目",
-    key: "name",
-    render: (r) =>
-      h(NInput, {
-        value: editingNames.value[r.id],
-        size: "small",
-        maxlength: 32,
-        onUpdateValue: (value) => {
-          editingNames.value[r.id] = value;
-        },
-        onBlur: () => renameProject(r),
-      }),
-  },
-  {
-    title: "操作",
-    key: "actions",
-    width: 160,
-    render: (r) =>
-      h("div", { class: "actions" }, [
-        h(
-          NButton,
-          { size: "small", quaternary: true, type: "primary", onClick: () => openDetail(r) },
-          { default: () => "详情" }
-        ),
-        h(
-          NButton,
-          {
-            size: "small",
-            quaternary: true,
-            type: "error",
-            disabled: usedProjectIds.value.has(r.id),
-            onClick: () => onDeleteProject(r),
-          },
-          { default: () => "删除" }
-        ),
-      ]),
-  },
-];
 
 const snapshotColumns = [
   {
@@ -305,9 +281,7 @@ onMounted(async () => {
 
 <template>
   <NCard title="项目管理" :bordered="false" class="section-card">
-    <p class="hint-text">
-      新增支付宝、微信等项目。有过日期记录的项目不能删除，但可以改名。
-    </p>
+    <p class="hint-text">点击方块查看曲线、改名或删除。有过日期记录的项目不能删除。</p>
     <NSpace :wrap="true" class="add-row">
       <NInput
         v-model:value="newProjectName"
@@ -318,13 +292,19 @@ onMounted(async () => {
       />
       <NButton type="primary" @click="addProject">新增项目</NButton>
     </NSpace>
-    <NDataTable
-      :columns="projectColumns"
-      :data="projects"
-      :bordered="false"
-      size="small"
-      :pagination="false"
-    />
+    <div v-if="projects.length" class="project-grid">
+      <button
+        v-for="project in projects"
+        :key="project.id"
+        type="button"
+        class="project-tile"
+        :title="project.name"
+        @click="openDetail(project)"
+      >
+        <span class="project-tile-name">{{ project.name }}</span>
+      </button>
+    </div>
+    <p v-else class="hint-text empty-projects">还没有项目，先在上方添加一个。</p>
   </NCard>
 
   <NCard title="记录某日资产" :bordered="false" class="section-card">
@@ -388,6 +368,15 @@ onMounted(async () => {
     :title="selectedProject ? `项目详情 · ${selectedProject.name}` : '项目详情'"
     style="max-width: 720px"
   >
+    <NForm class="rename-row" @submit.prevent="renameSelected">
+      <NInput
+        v-model:value="detailName"
+        maxlength="32"
+        placeholder="项目名称"
+        class="rename-input"
+      />
+      <NButton type="primary" attr-type="submit" :loading="renaming">保存名称</NButton>
+    </NForm>
     <p class="hint-text">该项目在各记录日的金额；未出现的日期按 0 计。</p>
     <h4 class="chart-title">{{ selectedProject?.name }} 金额曲线</h4>
     <BookLineChart v-if="showDetail" :points="projectPoints" />
@@ -402,6 +391,9 @@ onMounted(async () => {
       class="history-table"
     />
     <div class="modal-actions">
+      <NButton type="error" ghost :disabled="selectedInUse" @click="onDeleteSelected">
+        删除项目
+      </NButton>
       <NButton @click="showDetail = false">关闭</NButton>
     </div>
   </NModal>
@@ -430,16 +422,58 @@ onMounted(async () => {
   width: min(280px, 100%);
 }
 
-.actions {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 0.75rem;
 }
 
-:deep(.actions) {
+.project-tile {
+  appearance: none;
+  aspect-ratio: 1;
   display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  border: 1px solid #2e3340;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(212, 168, 83, 0.14) 0%, rgba(26, 29, 35, 0.9) 100%);
+  color: #e8eaed;
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+}
+
+.project-tile:hover,
+.project-tile:focus-visible {
+  border-color: #d4a853;
+  color: #d4a853;
+  outline: none;
+}
+
+.project-tile-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-all;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.empty-projects {
+  margin-top: 0.25rem;
+}
+
+.rename-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.rename-input {
+  flex: 1;
 }
 
 .day-footer {
@@ -477,6 +511,7 @@ onMounted(async () => {
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   margin-top: 1rem;
 }
 </style>
