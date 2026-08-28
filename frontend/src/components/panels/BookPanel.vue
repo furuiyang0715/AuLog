@@ -17,6 +17,7 @@ import {
   useMessage,
 } from "naive-ui";
 import BookLineChart from "../BookLineChart.vue";
+import BookPieChart from "../BookPieChart.vue";
 import { fmt, formatDateDisplay, toDateString } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
@@ -39,6 +40,8 @@ const savingDay = ref(false);
 const renaming = ref(false);
 const showDetail = ref(false);
 const selectedProject = ref(null);
+const showBreakdown = ref(false);
+const selectedSnapshot = ref(null);
 
 const projects = computed(() =>
   [...ledger.bookProjects.value].sort((a, b) =>
@@ -141,6 +144,25 @@ const projectPoints = computed(() => {
 
 const projectHistoryRows = computed(() => [...projectPoints.value].reverse());
 
+const breakdownSlices = computed(() => {
+  const snap = selectedSnapshot.value;
+  if (!snap) return [];
+  const amounts = snap.amounts || {};
+  const nameById = Object.fromEntries(projects.value.map((p) => [p.id, p.name]));
+  const slices = [];
+  for (const [pid, raw] of Object.entries(amounts)) {
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || Math.abs(amount) < 1e-9) continue;
+    slices.push({
+      name: nameById[pid] || "未知项目",
+      amount,
+      value: Math.abs(amount),
+    });
+  }
+  slices.sort((a, b) => b.value - a.value);
+  return slices;
+});
+
 async function addProject() {
   const name = newProjectName.value.trim();
   if (!name) {
@@ -209,6 +231,11 @@ function openDetail(project) {
   showDetail.value = true;
 }
 
+function openBreakdown(row) {
+  selectedSnapshot.value = row;
+  showBreakdown.value = true;
+}
+
 async function saveDay() {
   const day = selectedDay();
   if (!day) {
@@ -249,7 +276,16 @@ const snapshotColumns = [
   {
     title: "总资产",
     key: "total",
-    render: (r) => fmt(r.total),
+    render: (r) =>
+      h(
+        "button",
+        {
+          type: "button",
+          class: "total-link",
+          onClick: () => openBreakdown(r),
+        },
+        fmt(r.total)
+      ),
   },
   {
     title: "操作",
@@ -397,6 +433,25 @@ onMounted(async () => {
       <NButton @click="showDetail = false">关闭</NButton>
     </div>
   </NModal>
+
+  <NModal
+    v-model:show="showBreakdown"
+    preset="card"
+    :title="
+      selectedSnapshot
+        ? `资产构成 · ${formatDateDisplay(selectedSnapshot.date)}`
+        : '资产构成'
+    "
+    style="max-width: 640px"
+  >
+    <p class="hint-text">
+      总资产 {{ fmt(selectedSnapshot?.total) }} 元，仅展示金额不为 0 的项目。
+    </p>
+    <BookPieChart v-if="showBreakdown" :slices="breakdownSlices" />
+    <div class="modal-actions">
+      <NButton @click="showBreakdown = false">关闭</NButton>
+    </div>
+  </NModal>
 </template>
 
 <style scoped>
@@ -513,5 +568,24 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
+}
+
+:deep(.total-link) {
+  appearance: none;
+  padding: 0;
+  border: none;
+  background: none;
+  color: #d4a853;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+:deep(.total-link:hover),
+:deep(.total-link:focus-visible) {
+  color: #e8c068;
+  outline: none;
 }
 </style>
