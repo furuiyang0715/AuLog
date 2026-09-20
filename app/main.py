@@ -19,6 +19,7 @@ from app.auth import create_token, hash_password, user_id, verify_password
 from app.auth import get_current_user as auth_get_current_user
 from app.backup import export_user_data, import_user_data, parse_backup_json
 from app.book import router as book_router
+from app.work import router as work_router
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
 from cron.gold_history import get_range_history
@@ -38,6 +39,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(book_router)
+app.include_router(work_router)
 
 
 @app.on_event("startup")
@@ -51,9 +53,13 @@ def ensure_indexes() -> None:
         "ing_allocations",
         "book_projects",
         "book_snapshots",
+        "work_salaries",
+        "work_days",
     ):
         db[name].create_index("user_id")
     db.book_snapshots.create_index([("user_id", 1), ("date", 1)], unique=True)
+    db.work_salaries.create_index([("user_id", 1), ("month", 1)], unique=True)
+    db.work_days.create_index([("user_id", 1), ("date", 1)], unique=True)
     db.gold_price_samples.create_index([("label", 1), ("date", 1)])
     db.gold_price_samples.create_index([("label", 1), ("sampled_at", -1)])
 

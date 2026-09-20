@@ -20,6 +20,8 @@ REQUIRED_COLLECTIONS = (
 OPTIONAL_COLLECTIONS = (
     "book_projects",
     "book_snapshots",
+    "work_salaries",
+    "work_days",
 )
 COLLECTIONS = REQUIRED_COLLECTIONS + OPTIONAL_COLLECTIONS
 
@@ -46,6 +48,8 @@ ALLOWED_FIELDS: dict[str, tuple[str, ...]] = {
     ),
     "book_projects": ("name", "created_at", "updated_at"),
     "book_snapshots": ("date", "amounts", "created_at", "updated_at"),
+    "work_salaries": ("month", "amount", "created_at", "updated_at"),
+    "work_days": ("date", "hours", "created_at"),
 }
 
 
@@ -139,13 +143,13 @@ def _build_record(
             if value not in ("T_MATCH", "SELLED"):
                 raise HTTPException(status_code=400, detail="target_type 必须是 T_MATCH 或 SELLED")
             doc[key] = value
-        elif key in ("count", "pop_amount", "price", "amount", "buy_price", "buy_amount", "sell_price", "sell_amount"):
+        elif key in ("count", "pop_amount", "price", "amount", "buy_price", "buy_amount", "sell_price", "sell_amount", "hours"):
             doc[key] = round(float(value), 2)
         elif key == "name":
             doc[key] = str(value).strip() if value is not None else ""
         elif key == "amounts":
             doc[key] = _remap_book_amounts(value, id_maps)
-        elif key in ("mark", "date", "sold_at"):
+        elif key in ("mark", "date", "sold_at", "month"):
             doc[key] = str(value).strip() if value is not None else ""
         else:
             doc[key] = value
@@ -263,6 +267,24 @@ def import_user_data(db: Database, uid: ObjectId, payload: dict[str, Any]) -> di
                     detail=f"book_snapshots[{index}] 引用了不存在的项目: {project_id}",
                 )
 
+    salary_months: set[str] = set()
+    for index, record in enumerate(data["work_salaries"]):
+        month = record.get("month")
+        if not isinstance(month, str) or not month.strip():
+            raise HTTPException(status_code=400, detail=f"work_salaries[{index}] 缺少 month")
+        if month in salary_months:
+            raise HTTPException(status_code=400, detail=f"work_salaries 存在重复月份: {month}")
+        salary_months.add(month)
+
+    work_dates: set[str] = set()
+    for index, record in enumerate(data["work_days"]):
+        day = record.get("date")
+        if not isinstance(day, str) or not day.strip():
+            raise HTTPException(status_code=400, detail=f"work_days[{index}] 缺少 date")
+        if day in work_dates:
+            raise HTTPException(status_code=400, detail=f"work_days 存在重复日期: {day}")
+        work_dates.add(day)
+
     id_maps: dict[str, dict[str, ObjectId]] = {name: {} for name in COLLECTIONS}
 
     for name in COLLECTIONS:
@@ -276,6 +298,8 @@ def import_user_data(db: Database, uid: ObjectId, payload: dict[str, Any]) -> di
         "ing_allocations",
         "book_projects",
         "book_snapshots",
+        "work_salaries",
+        "work_days",
     )
     for collection in insert_order:
         docs = [

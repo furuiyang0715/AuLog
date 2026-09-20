@@ -20,6 +20,7 @@ import SelledPanel from "./panels/SelledPanel.vue";
 import AllocPanel from "./panels/AllocPanel.vue";
 import StatsPanel from "./panels/StatsPanel.vue";
 import BookPanel from "./panels/BookPanel.vue";
+import WorkLogPanel from "./panels/WorkLogPanel.vue";
 import DataPanel from "./panels/DataPanel.vue";
 
 const auth = useAuth();
@@ -121,6 +122,9 @@ function logout() {
               </NTabPane>
               <NTabPane name="book" tab="资产账本">
                 <div class="page-container"><BookPanel /></div>
+              </NTabPane>
+              <NTabPane name="work" tab="工时日志">
+                <div class="page-container"><WorkLogPanel /></div>
               </NTabPane>
               <NTabPane name="backup" tab="存档">
                 <div class="page-container"><DataPanel /></div>
