@@ -20,19 +20,50 @@ import {
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
+import { useGoldPrice } from "../../composables/useGoldPrice";
 
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
+const { goldLoading, currentGold, loadGoldPrice } = useGoldPrice();
 
 const onlyIncomplete = ref(false);
+const onlySettleable = ref(false);
 
 const tableRecords = computed(() => {
-  const rows = ledger.ingRecords.value;
-  if (!onlyIncomplete.value) return rows;
-  return rows.filter((r) => r.allocation_status !== "FULLY_ALLOCATED");
+  let rows = ledger.ingRecords.value;
+  if (onlyIncomplete.value) {
+    rows = rows.filter((r) => r.allocation_status !== "FULLY_ALLOCATED");
+  }
+  if (onlySettleable.value) {
+    const gold = currentGold.value;
+    if (gold == null) return [];
+    rows = rows.filter(
+      (r) => Number(r.remaining_count) > 0 && gold + 1e-9 >= Number(r.price)
+    );
+  }
+  return rows;
 });
+
+async function toggleSettleable() {
+  if (onlySettleable.value) {
+    onlySettleable.value = false;
+    resetPage();
+    return;
+  }
+  try {
+    const gold = await loadGoldPrice(true);
+    if (gold == null) {
+      message.warning("暂无金价，无法筛选可结算项目");
+      return;
+    }
+    onlySettleable.value = true;
+    resetPage();
+  } catch (err) {
+    message.error(err.message || "获取金价失败");
+  }
+}
 
 watchDataLength(tableRecords);
 
@@ -419,10 +450,23 @@ function onDelete(id) {
 
   <NCard title="进货列表" :bordered="false" class="section-card">
     <template #header-extra>
-      <label class="list-filter">
-        <NSwitch v-model:value="onlyIncomplete" size="small" @update:value="resetPage" />
-        <span>仅看未分完</span>
-      </label>
+      <div class="list-filters">
+        <label class="list-filter">
+          <NSwitch v-model:value="onlyIncomplete" size="small" @update:value="resetPage" />
+          <span>仅看未分完</span>
+        </label>
+        <NButton
+          size="small"
+          :type="onlySettleable ? 'primary' : 'default'"
+          :loading="goldLoading"
+          @click="toggleSettleable"
+        >
+          当前可结算
+        </NButton>
+        <span v-if="onlySettleable && currentGold != null" class="filter-price">
+          现价 {{ fmt(currentGold) }}
+        </span>
+      </div>
     </template>
     <NDataTable
       :columns="columns"
@@ -599,6 +643,13 @@ function onDelete(id) {
   margin-top: 0.5rem;
 }
 
+.list-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .list-filter {
   display: inline-flex;
   align-items: center;
@@ -607,6 +658,12 @@ function onDelete(id) {
   color: #8b929e;
   cursor: pointer;
   user-select: none;
+}
+
+.filter-price {
+  font-size: 0.8125rem;
+  color: #d4a853;
+  font-variant-numeric: tabular-nums;
 }
 
 .mark-link {

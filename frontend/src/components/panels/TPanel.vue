@@ -19,19 +19,50 @@ import {
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
+import { useGoldPrice } from "../../composables/useGoldPrice";
 
 const ledger = inject("ledger");
 const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
+const { goldLoading, currentGold, loadGoldPrice } = useGoldPrice();
 
 const onlyUnclosed = ref(false);
+const onlySettleable = ref(false);
 
 const tableRecords = computed(() => {
-  const rows = ledger.tRecords.value;
-  if (!onlyUnclosed.value) return rows;
-  return rows.filter((r) => r.status !== "CLOSED");
+  let rows = ledger.tRecords.value;
+  if (onlyUnclosed.value) {
+    rows = rows.filter((r) => r.status !== "CLOSED");
+  }
+  if (onlySettleable.value) {
+    const gold = currentGold.value;
+    if (gold == null) return [];
+    rows = rows.filter(
+      (r) => Number(r.remaining_count) > 0 && Number(r.price) + 1e-9 >= gold
+    );
+  }
+  return rows;
 });
+
+async function toggleSettleable() {
+  if (onlySettleable.value) {
+    onlySettleable.value = false;
+    resetPage();
+    return;
+  }
+  try {
+    const gold = await loadGoldPrice(true);
+    if (gold == null) {
+      message.warning("暂无金价，无法筛选可结算项目");
+      return;
+    }
+    onlySettleable.value = true;
+    resetPage();
+  } catch (err) {
+    message.error(err.message || "获取金价失败");
+  }
+}
 
 watchDataLength(tableRecords);
 
@@ -338,10 +369,23 @@ function onDelete(id) {
 
   <NCard title="倒 T 列表" :bordered="false" class="section-card">
     <template #header-extra>
-      <label class="list-filter">
-        <NSwitch v-model:value="onlyUnclosed" size="small" @update:value="resetPage" />
-        <span>仅看未闭环</span>
-      </label>
+      <div class="list-filters">
+        <label class="list-filter">
+          <NSwitch v-model:value="onlyUnclosed" size="small" @update:value="resetPage" />
+          <span>仅看未闭环</span>
+        </label>
+        <NButton
+          size="small"
+          :type="onlySettleable ? 'primary' : 'default'"
+          :loading="goldLoading"
+          @click="toggleSettleable"
+        >
+          当前可结算
+        </NButton>
+        <span v-if="onlySettleable && currentGold != null" class="filter-price">
+          现价 {{ fmt(currentGold) }}
+        </span>
+      </div>
     </template>
     <NDataTable
       :columns="columns"
@@ -522,6 +566,13 @@ function onDelete(id) {
   color: #c9cdd4;
 }
 
+.list-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 .list-filter {
   display: inline-flex;
   align-items: center;
@@ -530,5 +581,11 @@ function onDelete(id) {
   color: #8b929e;
   cursor: pointer;
   user-select: none;
+}
+
+.filter-price {
+  font-size: 0.8125rem;
+  color: #d4a853;
+  font-variant-numeric: tabular-nums;
 }
 </style>
