@@ -121,9 +121,13 @@ const linkedRows = computed(() => (selectedT.value ? buildLinkedRows(selectedT.v
 
 const linkedSummary = computed(() => {
   const rows = linkedRows.value;
+  const totalCount = rows.reduce((sum, row) => sum + (Number(row.matchCount) || 0), 0);
+  const totalAmount = rows.reduce((sum, row) => sum + (Number(row.matchAmount) || 0), 0);
+  const sellPrice = Number(selectedT.value?.price) || 0;
   return {
-    totalCount: rows.reduce((sum, row) => sum + (Number(row.matchCount) || 0), 0),
-    totalAmount: rows.reduce((sum, row) => sum + (Number(row.matchAmount) || 0), 0),
+    totalCount,
+    totalAmount,
+    gain: totalCount * sellPrice - totalAmount,
   };
 });
 
@@ -455,7 +459,9 @@ function onDelete(id) {
       />
       <p class="hint-text linked-total">
         合计：配对 {{ fmt(linkedSummary.totalCount) }} 克 · 买回成本
-        {{ fmt(linkedSummary.totalAmount) }}
+        {{ fmt(linkedSummary.totalAmount) }} · 套利
+        <span :class="gainType(linkedSummary.gain) === 'success' ? 'gain-positive' : gainType(linkedSummary.gain) === 'error' ? 'gain-negative' : ''">{{ fmt(linkedSummary.gain) }}</span>
+        元
       </p>
     </template>
     <template v-else>

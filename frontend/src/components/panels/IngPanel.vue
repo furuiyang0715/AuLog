@@ -114,9 +114,18 @@ const linkedTRows = computed(() =>
 
 const linkedTSummary = computed(() => {
   const rows = linkedTRows.value;
+  const totalCount = rows.reduce((sum, row) => sum + (Number(row.matchCount) || 0), 0);
+  const totalAmount = rows.reduce((sum, row) => sum + (Number(row.matchAmount) || 0), 0);
+  const sellAmount = rows.reduce((sum, row) => {
+    const count = Number(row.matchCount) || 0;
+    const sellPrice = Number(row.sellPrice);
+    if (!Number.isFinite(sellPrice)) return sum;
+    return sum + count * sellPrice;
+  }, 0);
   return {
-    totalCount: rows.reduce((sum, row) => sum + (Number(row.matchCount) || 0), 0),
-    totalAmount: rows.reduce((sum, row) => sum + (Number(row.matchAmount) || 0), 0),
+    totalCount,
+    totalAmount,
+    gain: sellAmount - totalAmount,
   };
 });
 
@@ -580,7 +589,9 @@ function onDelete(id) {
       />
       <p class="hint-text linked-total">
         合计：配对 {{ fmt(linkedTSummary.totalCount) }} 克 · 买回成本
-        {{ fmt(linkedTSummary.totalAmount) }}
+        {{ fmt(linkedTSummary.totalAmount) }} · 套利
+        <span :class="gainType(linkedTSummary.gain) === 'success' ? 'gain-positive' : gainType(linkedTSummary.gain) === 'error' ? 'gain-negative' : ''">{{ fmt(linkedTSummary.gain) }}</span>
+        元
       </p>
     </template>
     <template v-else>
