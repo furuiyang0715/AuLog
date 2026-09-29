@@ -61,6 +61,11 @@ const expectedNetDiff = computed(() => {
   return round2(expectedBuybackGain.value + expectedSellGain.value);
 });
 
+const liveGain = computed(() => {
+  if (expectedNetDiff.value == null) return null;
+  return round2(totalGain.value + expectedNetDiff.value);
+});
+
 const unsettledSellAvg = computed(() =>
   weightedAvgPrice(
     ledger.tRecords.value
@@ -149,6 +154,11 @@ onMounted(() => {
         <div class="summary-label">获利总和</div>
         <div class="hint-text">倒 T 已实现 + 反弹卖出</div>
         <div class="summary-value" :class="gainClass(totalGain)">{{ fmt(totalGain) }}</div>
+      </div>
+      <div class="stat-item summary-card stat-item-live">
+        <div class="summary-label">实时获利</div>
+        <div class="hint-text">获利总和 + 预估净差</div>
+        <div class="summary-value" :class="gainClass(liveGain)">{{ fmtEstimate(liveGain) }}</div>
       </div>
     </div>
   </NCard>
@@ -287,10 +297,20 @@ onMounted(() => {
   border: 1px solid rgba(212, 168, 83, 0.25);
 }
 
+.stat-item-live {
+  background: linear-gradient(135deg, rgba(78, 205, 196, 0.16) 0%, rgba(26, 29, 35, 0.72) 100%);
+  border: 1px solid rgba(78, 205, 196, 0.35);
+  box-shadow: inset 3px 0 0 #4ecdc4;
+}
+
 .summary-label {
   font-size: 0.95rem;
   color: #d4a853;
   font-weight: 600;
+}
+
+.stat-item-live .summary-label {
+  color: #4ecdc4;
 }
 
 .summary-value {
