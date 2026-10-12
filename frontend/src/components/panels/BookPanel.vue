@@ -26,6 +26,44 @@ const message = useMessage();
 const dialog = useDialog();
 const { pagination, resetPage, watchDataLength } = usePagination(10);
 
+const PRECIOUS_METAL_NAME = "贵金属";
+const PRECIOUS_FIELDS = [
+  ["gold_grams", "金持仓克重", 3],
+  ["gold_price", "金实时价格", 2],
+  ["silver_grams", "银持仓克重", 3],
+  ["silver_price", "银实时价格", 2],
+];
+
+function emptyPreciousMetals() {
+  return {
+    gold_grams: null,
+    gold_price: null,
+    silver_grams: null,
+    silver_price: null,
+  };
+}
+
+function isPreciousMetalProject(project) {
+  return project?.name === PRECIOUS_METAL_NAME;
+}
+
+function fmtGram(value) {
+  if (value == null || value === "") return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(3);
+}
+
+function computePreciousAmount(pm) {
+  if (!pm) return 0;
+  const g = Number(pm.gold_grams);
+  const gp = Number(pm.gold_price);
+  const s = Number(pm.silver_grams);
+  const sp = Number(pm.silver_price);
+  if (![g, gp, s, sp].every((v) => Number.isFinite(v))) return 0;
+  return Math.round((g * gp + s * sp) * 100) / 100;
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -36,6 +74,7 @@ const newProjectName = ref("");
 const detailName = ref("");
 const formDate = ref(startOfToday());
 const formAmounts = ref({});
+const formPreciousMetals = ref(emptyPreciousMetals());
 const savingDay = ref(false);
 const renaming = ref(false);
 const showDetail = ref(false);
@@ -48,6 +87,13 @@ const projects = computed(() =>
     (a.name || "").localeCompare(b.name || "", "zh")
   )
 );
+const preciousMetalProject = computed(
+  () => projects.value.find((p) => p.name === PRECIOUS_METAL_NAME) || null
+);
+const manualProjects = computed(() =>
+  projects.value.filter((p) => p.name !== PRECIOUS_METAL_NAME)
+);
+const preciousMetalAmount = computed(() => computePreciousAmount(formPreciousMetals.value));
 const snapshots = computed(() => ledger.bookSnapshots.value);
 const usedProjectIds = computed(() => {
   const ids = new Set();
@@ -73,17 +119,27 @@ function hydrateFromSnapshot() {
   const snap = snapshotForDay(selectedDay());
   const next = {};
   for (const project of projects.value) {
+    if (isPreciousMetalProject(project)) continue;
     const raw = snap?.amounts?.[project.id];
     next[project.id] = raw == null || raw === "" ? 0 : Number(raw);
   }
   formAmounts.value = next;
+  const pm = snap?.precious_metals;
+  formPreciousMetals.value = pm
+    ? {
+        gold_grams: pm.gold_grams,
+        gold_price: pm.gold_price,
+        silver_grams: pm.silver_grams,
+        silver_price: pm.silver_price,
+      }
+    : emptyPreciousMetals();
 }
 
 function ensureProjectAmountKeys() {
   const snap = snapshotForDay(selectedDay());
   const next = { ...formAmounts.value };
-  const ids = new Set(projects.value.map((p) => p.id));
-  for (const project of projects.value) {
+  const ids = new Set(manualProjects.value.map((p) => p.id));
+  for (const project of manualProjects.value) {
     if (next[project.id] === undefined) {
       const raw = snap?.amounts?.[project.id];
       next[project.id] = raw == null || raw === "" ? 0 : Number(raw);
@@ -118,12 +174,16 @@ const selectedInUse = computed(
   () => selectedProject.value != null && usedProjectIds.value.has(selectedProject.value.id)
 );
 
-const dayTotal = computed(() =>
-  projects.value.reduce((sum, project) => {
-    const value = formAmounts.value[project.id];
-    return sum + (Number(value) || 0);
-  }, 0)
-);
+const dayTotal = computed(() => {
+  let sum = 0;
+  for (const project of manualProjects.value) {
+    sum += Number(formAmounts.value[project.id]) || 0;
+  }
+  if (preciousMetalProject.value) {
+    sum += preciousMetalAmount.value;
+  }
+  return sum;
+});
 
 const sortedSnapshots = computed(() =>
   [...snapshots.value].sort((a, b) => a.date.localeCompare(b.date))
@@ -142,7 +202,28 @@ const projectPoints = computed(() => {
   }));
 });
 
-const projectHistoryRows = computed(() => [...projectPoints.value].reverse());
+const projectHistoryRows = computed(() => {
+  if (!selectedProject.value) return [];
+  const pid = selectedProject.value.id;
+  return sortedSnapshots.value
+    .map((row) => {
+      const base = {
+        date: row.date,
+        value: Number(row.amounts?.[pid] ?? 0),
+      };
+      if (isSelectedPreciousMetal.value && row.precious_metals) {
+        return {
+          ...base,
+          gold_grams: row.precious_metals.gold_grams,
+          gold_price: row.precious_metals.gold_price,
+          silver_grams: row.precious_metals.silver_grams,
+          silver_price: row.precious_metals.silver_price,
+        };
+      }
+      return base;
+    })
+    .reverse();
+});
 
 const breakdownSlices = computed(() => {
   const snap = selectedSnapshot.value;
@@ -246,13 +327,31 @@ async function saveDay() {
     message.warning("请先新增项目");
     return;
   }
+  if (preciousMetalProject.value) {
+    for (const [key, label] of PRECIOUS_FIELDS) {
+      const value = formPreciousMetals.value[key];
+      if (value == null || value === "") {
+        message.warning(`请填写${label}`);
+        return;
+      }
+    }
+  }
+
   savingDay.value = true;
   try {
     const amounts = {};
-    for (const project of projects.value) {
+    for (const project of manualProjects.value) {
       amounts[project.id] = Number(formAmounts.value[project.id]) || 0;
     }
-    await ledger.saveBookSnapshot(day, amounts);
+    const preciousMetals = preciousMetalProject.value
+      ? {
+          gold_grams: Number(formPreciousMetals.value.gold_grams),
+          gold_price: Number(formPreciousMetals.value.gold_price),
+          silver_grams: Number(formPreciousMetals.value.silver_grams),
+          silver_price: Number(formPreciousMetals.value.silver_price),
+        }
+      : null;
+    await ledger.saveBookSnapshot(day, amounts, preciousMetals);
     resetPage();
     message.success(`${formatDateDisplay(day)} 已保存`);
   } catch (err) {
@@ -267,43 +366,109 @@ function loadDay(row) {
   formDate.value = Number.isNaN(ts) ? startOfToday() : ts;
 }
 
-const snapshotColumns = [
-  {
-    title: "日期",
-    key: "date",
-    render: (r) => formatDateDisplay(r.date),
-  },
-  {
-    title: "总资产",
-    key: "total",
-    render: (r) =>
-      h(
-        "button",
-        {
-          type: "button",
-          class: "total-link",
-          onClick: () => openBreakdown(r),
-        },
-        fmt(r.total)
-      ),
-  },
-  {
-    title: "操作",
-    key: "actions",
-    width: 120,
-    render: (r) =>
-      h(
-        NButton,
-        { size: "small", quaternary: true, type: "primary", onClick: () => loadDay(r) },
-        { default: () => "载入" }
-      ),
-  },
-];
+const snapshotColumns = computed(() => {
+  const cols = [
+    {
+      title: "日期",
+      key: "date",
+      render: (r) => formatDateDisplay(r.date),
+    },
+  ];
+  if (preciousMetalProject.value) {
+    cols.push(
+      {
+        title: "金(克)",
+        key: "gold_grams",
+        width: 88,
+        render: (r) => fmtGram(r.precious_metals?.gold_grams),
+      },
+      {
+        title: "金价",
+        key: "gold_price",
+        width: 88,
+        render: (r) =>
+          r.precious_metals?.gold_price != null ? fmt(r.precious_metals.gold_price) : "—",
+      },
+      {
+        title: "银(克)",
+        key: "silver_grams",
+        width: 88,
+        render: (r) => fmtGram(r.precious_metals?.silver_grams),
+      },
+      {
+        title: "银价",
+        key: "silver_price",
+        width: 88,
+        render: (r) =>
+          r.precious_metals?.silver_price != null ? fmt(r.precious_metals.silver_price) : "—",
+      },
+      {
+        title: "贵金属",
+        key: "precious_amount",
+        width: 100,
+        render: (r) =>
+          r.precious_metals?.amount != null ? fmt(r.precious_metals.amount) : "—",
+      }
+    );
+  }
+  cols.push(
+    {
+      title: "总资产",
+      key: "total",
+      render: (r) =>
+        h(
+          "button",
+          {
+            type: "button",
+            class: "total-link",
+            onClick: () => openBreakdown(r),
+          },
+          fmt(r.total)
+        ),
+    },
+    {
+      title: "操作",
+      key: "actions",
+      width: 120,
+      render: (r) =>
+        h(
+          NButton,
+          { size: "small", quaternary: true, type: "primary", onClick: () => loadDay(r) },
+          { default: () => "载入" }
+        ),
+    }
+  );
+  return cols;
+});
 
-const historyColumns = [
-  { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
-  { title: "金额", key: "value", render: (r) => fmt(r.value) },
-];
+const isSelectedPreciousMetal = computed(
+  () => selectedProject.value?.name === PRECIOUS_METAL_NAME
+);
+
+const historyColumns = computed(() => {
+  if (!isSelectedPreciousMetal.value) {
+    return [
+      { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
+      { title: "金额", key: "value", render: (r) => fmt(r.value) },
+    ];
+  }
+  return [
+    { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
+    { title: "金(克)", key: "gold_grams", render: (r) => fmtGram(r.gold_grams) },
+    {
+      title: "金价",
+      key: "gold_price",
+      render: (r) => (r.gold_price != null ? fmt(r.gold_price) : "—"),
+    },
+    { title: "银(克)", key: "silver_grams", render: (r) => fmtGram(r.silver_grams) },
+    {
+      title: "银价",
+      key: "silver_price",
+      render: (r) => (r.silver_price != null ? fmt(r.silver_price) : "—"),
+    },
+    { title: "金额", key: "value", render: (r) => fmt(r.value) },
+  ];
+});
 
 onMounted(async () => {
   try {
@@ -356,7 +521,7 @@ onMounted(async () => {
             />
           </NFormItem>
         </NGridItem>
-        <NGridItem v-for="project in projects" :key="project.id" span="24 m:8">
+        <NGridItem v-for="project in manualProjects" :key="project.id" span="24 m:8">
           <NFormItem :label="project.name">
             <NInputNumber
               v-model:value="formAmounts[project.id]"
@@ -365,6 +530,64 @@ onMounted(async () => {
               placeholder="0.00"
             />
           </NFormItem>
+        </NGridItem>
+        <NGridItem v-if="preciousMetalProject" span="24">
+          <div class="precious-section">
+            <div class="summary-label">贵金属（自动计算）</div>
+            <p class="hint-text precious-hint">
+              金持仓 × 金价 + 银持仓 × 银价，结果写入「{{ PRECIOUS_METAL_NAME }}」项目。
+            </p>
+            <NGrid :cols="24" :x-gap="12" :y-gap="8" item-responsive responsive="screen">
+              <NGridItem span="24 m:6">
+                <NFormItem label="金持仓克重">
+                  <NInputNumber
+                    v-model:value="formPreciousMetals.gold_grams"
+                    :precision="3"
+                    :min="0"
+                    class="full-width"
+                    placeholder="0.000"
+                  />
+                </NFormItem>
+              </NGridItem>
+              <NGridItem span="24 m:6">
+                <NFormItem label="金实时价格（元/克）">
+                  <NInputNumber
+                    v-model:value="formPreciousMetals.gold_price"
+                    :precision="2"
+                    :min="0"
+                    class="full-width"
+                    placeholder="0.00"
+                  />
+                </NFormItem>
+              </NGridItem>
+              <NGridItem span="24 m:6">
+                <NFormItem label="银持仓克重">
+                  <NInputNumber
+                    v-model:value="formPreciousMetals.silver_grams"
+                    :precision="3"
+                    :min="0"
+                    class="full-width"
+                    placeholder="0.000"
+                  />
+                </NFormItem>
+              </NGridItem>
+              <NGridItem span="24 m:6">
+                <NFormItem label="银实时价格（元/克）">
+                  <NInputNumber
+                    v-model:value="formPreciousMetals.silver_price"
+                    :precision="2"
+                    :min="0"
+                    class="full-width"
+                    placeholder="0.00"
+                  />
+                </NFormItem>
+              </NGridItem>
+            </NGrid>
+            <div class="precious-total">
+              <span class="hint-text">贵金属合计</span>
+              <span class="day-total precious-sum">{{ fmt(preciousMetalAmount) }} 元</span>
+            </div>
+          </div>
         </NGridItem>
         <NGridItem span="24">
           <div class="day-footer">
@@ -447,6 +670,31 @@ onMounted(async () => {
     <p class="hint-text">
       总资产 {{ fmt(selectedSnapshot?.total) }} 元，仅展示金额不为 0 的项目。
     </p>
+    <div v-if="selectedSnapshot?.precious_metals" class="precious-detail">
+      <h4 class="chart-title">贵金属明细</h4>
+      <div class="precious-detail-grid">
+        <div>
+          <span class="detail-label">金持仓</span>
+          <span>{{ fmtGram(selectedSnapshot.precious_metals.gold_grams) }} 克</span>
+        </div>
+        <div>
+          <span class="detail-label">金实时价格</span>
+          <span>{{ fmt(selectedSnapshot.precious_metals.gold_price) }} 元/克</span>
+        </div>
+        <div>
+          <span class="detail-label">银持仓</span>
+          <span>{{ fmtGram(selectedSnapshot.precious_metals.silver_grams) }} 克</span>
+        </div>
+        <div>
+          <span class="detail-label">银实时价格</span>
+          <span>{{ fmt(selectedSnapshot.precious_metals.silver_price) }} 元/克</span>
+        </div>
+        <div class="precious-detail-total">
+          <span class="detail-label">贵金属合计</span>
+          <span class="day-total">{{ fmt(selectedSnapshot.precious_metals.amount) }} 元</span>
+        </div>
+      </div>
+    </div>
     <BookPieChart v-if="showBreakdown" :slices="breakdownSlices" />
     <div class="modal-actions">
       <NButton @click="showBreakdown = false">关闭</NButton>
@@ -550,6 +798,58 @@ onMounted(async () => {
   font-weight: 700;
   color: #d4a853;
   font-variant-numeric: tabular-nums;
+}
+
+.precious-section {
+  padding: 0.75rem 0 0.25rem;
+  border-top: 1px solid #2e3340;
+}
+
+.precious-hint {
+  margin-top: 0.25rem;
+}
+
+.precious-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.precious-sum {
+  font-size: 1.25rem;
+}
+
+.precious-detail {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #2e3340;
+  border-radius: 8px;
+  background: rgba(212, 168, 83, 0.06);
+}
+
+.precious-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem 1rem;
+}
+
+.detail-label {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #8b929e;
+  font-size: 0.8rem;
+}
+
+.precious-detail-total {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed #2e3340;
 }
 
 .chart-title {

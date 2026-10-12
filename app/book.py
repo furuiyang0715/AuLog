@@ -15,14 +15,23 @@ from app.db import get_db
 router = APIRouter(prefix="/api/book", tags=["book"])
 
 _DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+PRECIOUS_METAL_PROJECT_NAME = "贵金属"
 
 
 class BookProjectBody(BaseModel):
     name: str = Field(min_length=1, max_length=32)
 
 
+class PreciousMetalsBody(BaseModel):
+    gold_grams: float
+    gold_price: float
+    silver_grams: float
+    silver_price: float
+
+
 class BookSnapshotBody(BaseModel):
     amounts: dict[str, Optional[float]] = Field(default_factory=dict)
+    precious_metals: Optional[PreciousMetalsBody] = None
 
 
 def round2(value: float) -> float:
@@ -110,6 +119,63 @@ def parse_amount(value: Any) -> float:
         raise HTTPException(status_code=400, detail="金额必须是数字") from exc
 
 
+def round3(value: float) -> float:
+    return round(float(value), 3)
+
+
+def parse_gram(value: Any, label: str) -> float:
+    if value is None or value == "":
+        raise HTTPException(status_code=400, detail=f"请填写{label}")
+    try:
+        grams = float(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{label}必须是数字") from exc
+    if grams < 0:
+        raise HTTPException(status_code=400, detail=f"{label}不能为负数")
+    return round3(grams)
+
+
+def parse_price(value: Any, label: str) -> float:
+    if value is None or value == "":
+        raise HTTPException(status_code=400, detail=f"请填写{label}")
+    try:
+        price = float(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"{label}必须是数字") from exc
+    if price < 0:
+        raise HTTPException(status_code=400, detail=f"{label}不能为负数")
+    return round2(price)
+
+
+def find_precious_metal_project(
+    projects: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    return next(
+        (project for project in projects if project.get("name") == PRECIOUS_METAL_PROJECT_NAME),
+        None,
+    )
+
+
+def normalize_precious_metals(raw: PreciousMetalsBody | dict[str, Any]) -> dict[str, float]:
+    if isinstance(raw, PreciousMetalsBody):
+        data = raw.model_dump()
+    else:
+        data = raw
+    return {
+        "gold_grams": parse_gram(data.get("gold_grams"), "金持仓克重"),
+        "gold_price": parse_price(data.get("gold_price"), "金实时价格"),
+        "silver_grams": parse_gram(data.get("silver_grams"), "银持仓克重"),
+        "silver_price": parse_price(data.get("silver_price"), "银实时价格"),
+    }
+
+
+def compute_precious_metals_amount(precious: dict[str, float]) -> float:
+    return round2(
+        precious["gold_grams"] * precious["gold_price"]
+        + precious["silver_grams"] * precious["silver_price"]
+    )
+
+
 def enrich_snapshot(doc: dict[str, Any]) -> dict[str, Any]:
     item = serialize(doc) or {}
     amounts = item.get("amounts") or {}
@@ -118,6 +184,20 @@ def enrich_snapshot(doc: dict[str, Any]) -> dict[str, Any]:
         normalized[str(key)] = parse_amount(value)
     item["amounts"] = normalized
     item["total"] = round2(sum(normalized.values()))
+    raw_precious = item.get("precious_metals")
+    if raw_precious:
+        normalized_pm = {
+            "gold_grams": round3(raw_precious["gold_grams"]),
+            "gold_price": round2(raw_precious["gold_price"]),
+            "silver_grams": round3(raw_precious["silver_grams"]),
+            "silver_price": round2(raw_precious["silver_price"]),
+        }
+        item["precious_metals"] = {
+            **normalized_pm,
+            "amount": compute_precious_metals_amount(normalized_pm),
+        }
+    else:
+        item["precious_metals"] = None
     return item
 
 
@@ -199,22 +279,38 @@ def upsert_book_snapshot(
         raise HTTPException(status_code=400, detail="请先新增项目")
 
     amounts = build_day_amounts(projects, body.amounts or {})
+    precious_project = find_precious_metal_project(projects)
+    precious_metals: dict[str, float] | None = None
+    if precious_project is not None:
+        if body.precious_metals is None:
+            raise HTTPException(status_code=400, detail="请填写贵金属持仓与价格")
+        precious_metals = normalize_precious_metals(body.precious_metals)
+        amounts[str(precious_project["_id"])] = compute_precious_metals_amount(
+            precious_metals
+        )
+
     now = datetime.utcnow()
     existing = db.book_snapshots.find_one({"user_id": uid, "date": day})
     if existing:
-        update = {"amounts": amounts, "updated_at": now}
+        update: dict[str, Any] = {"amounts": amounts, "updated_at": now}
+        if precious_metals is not None:
+            update["precious_metals"] = precious_metals
+        else:
+            update["precious_metals"] = None
         db.book_snapshots.update_one(
             {"_id": existing["_id"], "user_id": uid}, {"$set": update}
         )
         existing.update(update)
         return enrich_snapshot(existing)
 
-    doc = {
+    doc: dict[str, Any] = {
         "user_id": uid,
         "date": day,
         "amounts": amounts,
         "created_at": now,
     }
+    if precious_metals is not None:
+        doc["precious_metals"] = precious_metals
     result = db.book_snapshots.insert_one(doc)
     doc["_id"] = result.inserted_id
     return enrich_snapshot(doc)

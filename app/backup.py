@@ -47,7 +47,13 @@ ALLOWED_FIELDS: dict[str, tuple[str, ...]] = {
         "created_at",
     ),
     "book_projects": ("name", "created_at", "updated_at"),
-    "book_snapshots": ("date", "amounts", "created_at", "updated_at"),
+    "book_snapshots": (
+        "date",
+        "amounts",
+        "precious_metals",
+        "created_at",
+        "updated_at",
+    ),
     "work_salaries": ("month", "amount", "created_at", "updated_at"),
     "work_days": ("date", "hours", "created_at"),
 }
