@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, inject, ref } from "vue";
+import { computed, h, inject, ref, watch } from "vue";
 import {
   NButton,
   NCard,
@@ -188,6 +188,27 @@ const tOptionsForIng = (ing) => {
     }));
 };
 
+function suggestMatchCount(ing, tId) {
+  if (!ing || !tId) return null;
+  const ingRemain = Number(ing.remaining_count) || 0;
+  const t = ledger.tRecords.value.find((row) => row.id === tId);
+  const tRemain = t != null ? Number(t.remaining_count) || 0 : 0;
+  if (ingRemain <= 0 || tRemain <= 0) return null;
+  return Math.min(ingRemain, tRemain);
+}
+
+const matchCountMax = computed(() =>
+  suggestMatchCount(selectedIng.value, matchForm.value.t_id)
+);
+
+watch(
+  () => matchForm.value.t_id,
+  (tId) => {
+    if (!showMatch.value || !selectedIng.value || !tId) return;
+    matchForm.value.count = suggestMatchCount(selectedIng.value, tId);
+  }
+);
+
 function hStatus(status) {
   const meta = statusMap[status] || { label: status, type: "default" };
   return h(NTag, { size: "small", type: meta.type, bordered: false }, { default: () => meta.label });
@@ -294,13 +315,10 @@ function openMatch(ing) {
     return;
   }
   selectedIng.value = ing;
+  const firstTId = options[0].value;
   matchForm.value = {
-    t_id: options[0].value,
-    count: Math.min(
-      ing.remaining_count,
-      ledger.tRecords.value.find((t) => t.id === options[0].value)?.remaining_count ||
-        ing.remaining_count
-    ),
+    t_id: firstTId,
+    count: suggestMatchCount(ing, firstTId),
   };
   showMatch.value = true;
 }
@@ -535,7 +553,13 @@ function onDelete(id) {
         <NSelect v-model:value="matchForm.t_id" :options="tOptionsForIng(selectedIng)" />
       </NFormItem>
       <NFormItem label="配对克数">
-        <NInputNumber v-model:value="matchForm.count" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber
+          v-model:value="matchForm.count"
+          :min="0.01"
+          :max="matchCountMax ?? undefined"
+          :precision="2"
+          class="full-width"
+        />
       </NFormItem>
       <div class="modal-actions">
         <NButton @click="showMatch = false">取消</NButton>
