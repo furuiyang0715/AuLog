@@ -51,6 +51,7 @@ ALLOWED_FIELDS: dict[str, tuple[str, ...]] = {
         "date",
         "amounts",
         "precious_metals",
+        "note",
         "created_at",
         "updated_at",
     ),

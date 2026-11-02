@@ -124,8 +124,8 @@ export function useLedger() {
     await refreshBook();
   }
 
-  async function saveBookSnapshot(date, amounts, preciousMetals = null) {
-    const body = { amounts };
+  async function saveBookSnapshot(date, amounts, preciousMetals = null, note = null) {
+    const body = { amounts, note: note ?? "" };
     if (preciousMetals) body.precious_metals = preciousMetals;
     await api(`/book/snapshots/${date}`, {
       method: "PUT",

@@ -94,6 +94,81 @@ const unsettledBuyTotal = computed(() =>
     .reduce((sum, r) => sum + (Number(r.remaining_count) || 0), 0)
 );
 
+const unsettledSellWeightedSum = computed(() =>
+  ledger.tRecords.value
+    .filter((r) => r.status !== "CLOSED" && Number(r.remaining_count) > 0)
+    .reduce(
+      (sum, r) => sum + (Number(r.price) || 0) * (Number(r.remaining_count) || 0),
+      0
+    )
+);
+
+const unsettledBuyWeightedSum = computed(() =>
+  ledger.ingRecords.value
+    .filter((r) => Number(r.remaining_count) > 0)
+    .reduce(
+      (sum, r) => sum + (Number(r.price) || 0) * (Number(r.remaining_count) || 0),
+      0
+    )
+);
+
+function isBetweenAvgs(price, lowAvg, highAvg) {
+  const lo = Math.min(lowAvg, highAvg);
+  const hi = Math.max(lowAvg, highAvg);
+  return price >= lo - 1e-9 && price <= hi + 1e-9;
+}
+
+/**
+ * (未结卖出均价 − x)×S卖 + (未结买入均价 − x)×S买 = 0
+ * ⇒ x = (P卖×S卖 + P买×S买) / (S卖 + S买)
+ */
+const balancePoint = computed(() => {
+  const sellGrams = unsettledSellTotal.value;
+  const buyGrams = unsettledBuyTotal.value;
+  const sellAvg = unsettledSellAvg.value;
+  const buyAvg = unsettledBuyAvg.value;
+
+  if (sellGrams <= 0 && buyGrams <= 0) {
+    return { status: "empty", price: null, detail: "暂无未结倒 T 或进货" };
+  }
+  if (sellAvg == null || buyAvg == null || sellGrams <= 0 || buyGrams <= 0) {
+    return {
+      status: "need_both",
+      price: null,
+      detail: "需同时存在未结卖出与未结买入，且平衡点位落在两均价之间",
+    };
+  }
+
+  const totalGrams = sellGrams + buyGrams;
+  const rawPrice = round2(
+    (unsettledSellWeightedSum.value + unsettledBuyWeightedSum.value) / totalGrams
+  );
+
+  if (!isBetweenAvgs(rawPrice, sellAvg, buyAvg)) {
+    return {
+      status: "out_of_range",
+      price: null,
+      detail: `计算结果 ${fmt(rawPrice)} 不在两均价之间，不作参考`,
+    };
+  }
+
+  return {
+    status: "ok",
+    price: rawPrice,
+    detail: null,
+  };
+});
+
+const balancePointVsGold = computed(() => {
+  const point = balancePoint.value;
+  const gold = currentGold.value;
+  if (point.status !== "ok" || point.price == null || gold == null) return null;
+  const diff = round2(gold - point.price);
+  if (Math.abs(diff) < 0.005) return "与当前金价基本一致";
+  if (diff > 0) return `当前金价高于平衡点 ${fmt(Math.abs(diff))} 元/克`;
+  return `当前金价低于平衡点 ${fmt(Math.abs(diff))} 元/克`;
+});
+
 function weightedAvgPrice(rows) {
   const totalWeight = rows.reduce((sum, r) => sum + (Number(r.count) || 0), 0);
   if (totalWeight <= 0) return null;
@@ -216,7 +291,7 @@ onMounted(() => {
 
   <NCard title="未结均价" :bordered="false" class="section-card">
     <p class="hint-text estimate-intro">
-      按剩余克数加权：未闭合倒 T 的卖出均价、未分完进货的买入均价。
+      按剩余克数加权：未闭合倒 T 的卖出均价、未分完进货的买入均价；平衡点位 x 满足 (卖出均价−x)×卖出克数 + (买入均价−x)×买入克数 = 0，且落在两均价之间。
     </p>
     <div class="stats-grid">
       <div class="stat-item summary-card">
@@ -235,6 +310,19 @@ onMounted(() => {
         </div>
         <div class="summary-value summary-price">
           {{ unsettledBuyAvg == null ? "—" : fmt(unsettledBuyAvg) }}
+        </div>
+      </div>
+      <div class="stat-item summary-card stat-item-balance">
+        <div class="summary-label">平衡点位</div>
+        <div class="hint-text">(卖均价−x)×卖克 + (买均价−x)×买克 = 0 · 元/克</div>
+        <div class="summary-value summary-price">
+          {{ balancePoint.status === "ok" ? fmt(balancePoint.price) : "—" }}
+        </div>
+        <div v-if="balancePointVsGold" class="hint-text balance-vs-gold">
+          {{ balancePointVsGold }}
+        </div>
+        <div v-else-if="balancePoint.detail" class="hint-text balance-vs-gold">
+          {{ balancePoint.detail }}
         </div>
       </div>
     </div>
@@ -301,6 +389,14 @@ onMounted(() => {
   background: linear-gradient(135deg, rgba(78, 205, 196, 0.16) 0%, rgba(26, 29, 35, 0.72) 100%);
   border: 1px solid rgba(78, 205, 196, 0.35);
   box-shadow: inset 3px 0 0 #4ecdc4;
+}
+
+.stat-item-balance {
+  border: 1px solid rgba(212, 168, 83, 0.2);
+}
+
+.balance-vs-gold {
+  margin-top: 0.15rem;
 }
 
 .summary-label {

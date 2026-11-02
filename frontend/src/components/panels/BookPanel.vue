@@ -64,6 +64,12 @@ function computePreciousAmount(pm) {
   return Math.round((g * gp + s * sp) * 100) / 100;
 }
 
+function fmtNote(value, max = 24) {
+  const text = (value || "").trim();
+  if (!text) return "—";
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
 function startOfToday() {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -75,6 +81,7 @@ const detailName = ref("");
 const formDate = ref(startOfToday());
 const formAmounts = ref({});
 const formPreciousMetals = ref(emptyPreciousMetals());
+const formNote = ref("");
 const savingDay = ref(false);
 const renaming = ref(false);
 const showDetail = ref(false);
@@ -133,6 +140,7 @@ function hydrateFromSnapshot() {
         silver_price: pm.silver_price,
       }
     : emptyPreciousMetals();
+  formNote.value = snap?.note || "";
 }
 
 function ensureProjectAmountKeys() {
@@ -351,7 +359,7 @@ async function saveDay() {
           silver_price: Number(formPreciousMetals.value.silver_price),
         }
       : null;
-    await ledger.saveBookSnapshot(day, amounts, preciousMetals);
+    await ledger.saveBookSnapshot(day, amounts, preciousMetals, formNote.value);
     resetPage();
     message.success(`${formatDateDisplay(day)} 已保存`);
   } catch (err) {
@@ -425,6 +433,15 @@ const snapshotColumns = computed(() => {
           },
           fmt(r.total)
         ),
+    },
+    {
+      title: "备注",
+      key: "note",
+      ellipsis: { tooltip: true },
+      render: (r) => {
+        if (!r.note) return "—";
+        return h("span", { title: r.note, class: "note-cell" }, fmtNote(r.note));
+      },
     },
     {
       title: "操作",
@@ -590,6 +607,19 @@ onMounted(async () => {
           </div>
         </NGridItem>
         <NGridItem span="24">
+          <NFormItem label="备注">
+            <NInput
+              v-model:value="formNote"
+              type="textarea"
+              maxlength="200"
+              show-count
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              placeholder="记录本次资产变更原因（选填）"
+              class="full-width"
+            />
+          </NFormItem>
+        </NGridItem>
+        <NGridItem span="24">
           <div class="day-footer">
             <div>
               <div class="summary-label">当日总资产</div>
@@ -670,6 +700,10 @@ onMounted(async () => {
     <p class="hint-text">
       总资产 {{ fmt(selectedSnapshot?.total) }} 元，仅展示金额不为 0 的项目。
     </p>
+    <div v-if="selectedSnapshot?.note" class="snapshot-note">
+      <span class="detail-label">备注</span>
+      <p class="snapshot-note-text">{{ selectedSnapshot.note }}</p>
+    </div>
     <div v-if="selectedSnapshot?.precious_metals" class="precious-detail">
       <h4 class="chart-title">贵金属明细</h4>
       <div class="precious-detail-grid">
@@ -798,6 +832,32 @@ onMounted(async () => {
   font-weight: 700;
   color: #d4a853;
   font-variant-numeric: tabular-nums;
+}
+
+.note-cell {
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.snapshot-note {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border: 1px solid #2e3340;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.snapshot-note-text {
+  margin: 0.35rem 0 0;
+  color: #e8eaed;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .precious-section {

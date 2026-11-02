@@ -208,6 +208,9 @@ const exampleSelled = [
             <li>
               <strong>预估净差</strong>：上述两项相加，表示若按当前金价同时「买回未闭合 + 卖掉未分配」的浮动合计
             </li>
+            <li>
+              <strong>平衡点位</strong>：满足 (未结卖出均价−x)×卖出克数 + (未结买入均价−x)×买入克数 = 0，且 x 落在两均价之间
+            </li>
           </ul>
         </section>
 

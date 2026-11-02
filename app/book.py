@@ -32,6 +32,7 @@ class PreciousMetalsBody(BaseModel):
 class BookSnapshotBody(BaseModel):
     amounts: dict[str, Optional[float]] = Field(default_factory=dict)
     precious_metals: Optional[PreciousMetalsBody] = None
+    note: Optional[str] = Field(default=None, max_length=200)
 
 
 def round2(value: float) -> float:
@@ -176,6 +177,17 @@ def compute_precious_metals_amount(precious: dict[str, float]) -> float:
     )
 
 
+def normalize_note(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if len(text) > 200:
+        raise HTTPException(status_code=400, detail="备注不能超过 200 字")
+    return text
+
+
 def enrich_snapshot(doc: dict[str, Any]) -> dict[str, Any]:
     item = serialize(doc) or {}
     amounts = item.get("amounts") or {}
@@ -198,6 +210,7 @@ def enrich_snapshot(doc: dict[str, Any]) -> dict[str, Any]:
         }
     else:
         item["precious_metals"] = None
+    item["note"] = normalize_note(item.get("note"))
     return item
 
 
@@ -289,10 +302,15 @@ def upsert_book_snapshot(
             precious_metals
         )
 
+    note = normalize_note(body.note)
     now = datetime.utcnow()
     existing = db.book_snapshots.find_one({"user_id": uid, "date": day})
     if existing:
-        update: dict[str, Any] = {"amounts": amounts, "updated_at": now}
+        update: dict[str, Any] = {
+            "amounts": amounts,
+            "note": note,
+            "updated_at": now,
+        }
         if precious_metals is not None:
             update["precious_metals"] = precious_metals
         else:
@@ -307,6 +325,7 @@ def upsert_book_snapshot(
         "user_id": uid,
         "date": day,
         "amounts": amounts,
+        "note": note,
         "created_at": now,
     }
     if precious_metals is not None:
