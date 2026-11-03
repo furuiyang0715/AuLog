@@ -18,6 +18,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
+import { firstValidationError, validatePriceCountAmount } from "../../utils/tradeAmount";
 import { usePagination } from "../../composables/usePagination";
 import { useGoldPrice } from "../../composables/useGoldPrice";
 
@@ -78,6 +79,7 @@ const buybackRemainingTotal = computed(() =>
 
 const form = ref({
   mark: "",
+  price: null,
   count: null,
   pop_amount: null,
   sold_at: Date.now(),
@@ -89,6 +91,7 @@ const showLinkedIng = ref(false);
 const selectedT = ref(null);
 const editForm = ref({
   mark: "",
+  price: null,
   count: null,
   pop_amount: null,
   sold_at: null,
@@ -240,18 +243,24 @@ const columns = [
 ];
 
 async function submit() {
-  if (!form.value.count || !form.value.pop_amount) {
-    message.warning("请填写克数和回笼金额");
+  const check = validatePriceCountAmount({
+    price: form.value.price,
+    count: form.value.count,
+    amount: form.value.pop_amount,
+    requireTotal: true,
+  });
+  if (!check.ok) {
+    message.warning(firstValidationError(check));
     return;
   }
   try {
     await ledger.createT({
       mark: form.value.mark,
       count: form.value.count,
-      pop_amount: form.value.pop_amount,
+      pop_amount: check.expectedAmount,
       sold_at: form.value.sold_at ? toDateTimeString(form.value.sold_at) : null,
     });
-    form.value = { mark: "", count: null, pop_amount: null, sold_at: Date.now() };
+    form.value = { mark: "", price: null, count: null, pop_amount: null, sold_at: Date.now() };
     message.success("倒 T 记录已添加");
   } catch (err) {
     message.error(err.message);
@@ -262,6 +271,7 @@ function openEdit(record) {
   editingId.value = record.id;
   editForm.value = {
     mark: record.mark || "",
+    price: record.price,
     count: record.count,
     pop_amount: record.pop_amount,
     sold_at: parseLegacyDate(record.sold_at),
@@ -271,8 +281,14 @@ function openEdit(record) {
 }
 
 async function submitEdit() {
-  if (!editForm.value.count || !editForm.value.pop_amount) {
-    message.warning("请填写克数和回笼金额");
+  const check = validatePriceCountAmount({
+    price: editForm.value.price,
+    count: editForm.value.count,
+    amount: editForm.value.pop_amount,
+    requireTotal: true,
+  });
+  if (!check.ok) {
+    message.warning(firstValidationError(check));
     return;
   }
   if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
@@ -283,7 +299,7 @@ async function submitEdit() {
     await ledger.updateT(editingId.value, {
       mark: editForm.value.mark,
       count: editForm.value.count,
-      pop_amount: editForm.value.pop_amount,
+      pop_amount: check.expectedAmount,
       sold_at: editForm.value.sold_at ? toDateTimeString(editForm.value.sold_at) : null,
     });
     showEdit.value = false;
@@ -318,6 +334,11 @@ function onDelete(id) {
         <NGridItem span="24 m:8">
           <NFormItem label="备注 mark">
             <NInput v-model:value="form.mark" placeholder="卖了什么" />
+          </NFormItem>
+        </NGridItem>
+        <NGridItem span="24 m:8">
+          <NFormItem label="单价（元/克）">
+            <NInputNumber v-model:value="form.price" :min="0.01" :precision="2" class="full-width" />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
@@ -409,6 +430,9 @@ function onDelete(id) {
     <NForm @submit.prevent="submitEdit">
       <NFormItem label="备注 mark">
         <NInput v-model:value="editForm.mark" />
+      </NFormItem>
+      <NFormItem label="单价（元/克）">
+        <NInputNumber v-model:value="editForm.price" :min="0.01" :precision="2" class="full-width" />
       </NFormItem>
       <NFormItem label="克数 count">
         <NInputNumber

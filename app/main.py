@@ -22,6 +22,7 @@ from app.book import router as book_router
 from app.work import router as work_router
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
+from app.trade_amount import resolve_ing_amount, validate_t_pop_amount
 from cron.gold_history import get_range_history
 
 GOLD_HISTORY_LABELS = {"浙商黄金", "伦敦金"}
@@ -401,11 +402,14 @@ def list_t_records(uid: ObjectId = Depends(user_id)):
 @app.post("/api/t-records", status_code=201)
 def create_t_record(body: TCreate, uid: ObjectId = Depends(user_id)):
     db = get_db()
+    count = round2(body.count)
+    pop_amount = round2(body.pop_amount)
+    validate_t_pop_amount(count, pop_amount)
     doc = {
         "user_id": uid,
         "mark": body.mark.strip(),
-        "count": round2(body.count),
-        "pop_amount": round2(body.pop_amount),
+        "count": count,
+        "pop_amount": pop_amount,
         "sold_at": body.sold_at,
         "created_at": datetime.utcnow(),
     }
@@ -421,6 +425,8 @@ def update_t_record(record_id: str, body: TCreate, uid: ObjectId = Depends(user_
     allocations = db.ing_allocations
     allocated = t_allocated_count(doc["_id"], allocations)
     new_count = round2(body.count)
+    new_pop = round2(body.pop_amount)
+    validate_t_pop_amount(new_count, new_pop)
 
     if new_count + 1e-9 < allocated:
         raise HTTPException(
@@ -431,7 +437,7 @@ def update_t_record(record_id: str, body: TCreate, uid: ObjectId = Depends(user_
     update = {
         "mark": body.mark.strip(),
         "count": new_count,
-        "pop_amount": round2(body.pop_amount),
+        "pop_amount": new_pop,
         "sold_at": body.sold_at,
         "updated_at": datetime.utcnow(),
     }
@@ -474,7 +480,7 @@ def list_ing_records(uid: ObjectId = Depends(user_id)):
 @app.post("/api/ing-records", status_code=201)
 def create_ing_record(body: IngCreate, uid: ObjectId = Depends(user_id)):
     db = get_db()
-    amount = round2(body.amount if body.amount is not None else body.price * body.count)
+    amount = resolve_ing_amount(body.price, body.count, body.amount)
     doc = {
         "user_id": uid,
         "date": body.date.strip(),
@@ -504,7 +510,7 @@ def update_ing_record(record_id: str, body: IngCreate, uid: ObjectId = Depends(u
             detail=f"克数不能小于已分配克数 {allocated} 克",
         )
 
-    amount = round2(body.amount if body.amount is not None else new_price * new_count)
+    amount = resolve_ing_amount(new_price, new_count, body.amount)
     update = {
         "date": body.date.strip(),
         "mark": body.mark.strip(),

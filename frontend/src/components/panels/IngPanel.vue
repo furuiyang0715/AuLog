@@ -19,6 +19,7 @@ import {
   useMessage,
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
+import { firstValidationError, validatePriceCountAmount } from "../../utils/tradeAmount";
 import { usePagination } from "../../composables/usePagination";
 import { useGoldPrice } from "../../composables/useGoldPrice";
 
@@ -289,8 +290,18 @@ const editForm = ref({
 });
 
 async function submit() {
-  if (!form.value.date || !form.value.price || !form.value.count) {
-    message.warning("请填写日期、单价和克数");
+  if (!form.value.date) {
+    message.warning("请填写日期");
+    return;
+  }
+  const check = validatePriceCountAmount({
+    price: form.value.price,
+    count: form.value.count,
+    amount: form.value.amount,
+    requireTotal: false,
+  });
+  if (!check.ok) {
+    message.warning(firstValidationError(check));
     return;
   }
   try {
@@ -299,7 +310,7 @@ async function submit() {
       mark: form.value.mark,
       price: form.value.price,
       count: form.value.count,
-      amount: form.value.amount,
+      amount: form.value.amount ?? check.expectedAmount,
     });
     form.value = { date: Date.now(), mark: "", price: null, count: null, amount: null };
     message.success("进货记录已添加");
@@ -348,8 +359,18 @@ function openEdit(record) {
 }
 
 async function submitEdit() {
-  if (!editForm.value.date || !editForm.value.price || !editForm.value.count) {
-    message.warning("请填写日期、单价和克数");
+  if (!editForm.value.date) {
+    message.warning("请填写日期");
+    return;
+  }
+  const check = validatePriceCountAmount({
+    price: editForm.value.price,
+    count: editForm.value.count,
+    amount: editForm.value.amount,
+    requireTotal: false,
+  });
+  if (!check.ok) {
+    message.warning(firstValidationError(check));
     return;
   }
   if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
@@ -362,7 +383,7 @@ async function submitEdit() {
       mark: editForm.value.mark,
       price: editForm.value.price,
       count: editForm.value.count,
-      amount: editForm.value.amount,
+      amount: editForm.value.amount ?? check.expectedAmount,
     });
     showEdit.value = false;
     message.success("已保存");
