@@ -18,7 +18,11 @@ import {
   useMessage,
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
-import { firstValidationError, validatePriceCountAmount } from "../../utils/tradeAmount";
+import {
+  firstValidationError,
+  syncTradeAmounts,
+  validatePriceCountAmount,
+} from "../../utils/tradeAmount";
 import { usePagination } from "../../composables/usePagination";
 import { useGoldPrice } from "../../composables/useGoldPrice";
 
@@ -242,12 +246,59 @@ const columns = [
   { title: "操作", key: "actions", width: 120, render: actionButtons },
 ];
 
+function hasPositive(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
+}
+
+function onFormPriceChange() {
+  syncTradeAmounts(form.value, "price", "pop_amount");
+}
+
+function onFormCountChange() {
+  syncTradeAmounts(form.value, "count", "pop_amount");
+}
+
+function onFormPopChange() {
+  syncTradeAmounts(form.value, "amount", "pop_amount");
+}
+
+function onEditPriceChange() {
+  syncTradeAmounts(editForm.value, "price", "pop_amount");
+}
+
+function onEditCountChange() {
+  syncTradeAmounts(editForm.value, "count", "pop_amount");
+}
+
+function onEditPopChange() {
+  syncTradeAmounts(editForm.value, "amount", "pop_amount");
+}
+
+function ensureTTradeFields(state) {
+  if (!hasPositive(state.count)) {
+    message.warning("请填写克数");
+    return false;
+  }
+  if (!hasPositive(state.price) && !hasPositive(state.pop_amount)) {
+    message.warning("请填写单价或回笼金额");
+    return false;
+  }
+  if (hasPositive(state.price)) {
+    syncTradeAmounts(state, "price", "pop_amount");
+  } else {
+    syncTradeAmounts(state, "amount", "pop_amount");
+  }
+  return true;
+}
+
 async function submit() {
+  if (!ensureTTradeFields(form.value)) return;
   const check = validatePriceCountAmount({
     price: form.value.price,
     count: form.value.count,
     amount: form.value.pop_amount,
-    requireTotal: true,
+    requireTotal: false,
   });
   if (!check.ok) {
     message.warning(firstValidationError(check));
@@ -281,11 +332,12 @@ function openEdit(record) {
 }
 
 async function submitEdit() {
+  if (!ensureTTradeFields(editForm.value)) return;
   const check = validatePriceCountAmount({
     price: editForm.value.price,
     count: editForm.value.count,
     amount: editForm.value.pop_amount,
-    requireTotal: true,
+    requireTotal: false,
   });
   if (!check.ok) {
     message.warning(firstValidationError(check));
@@ -338,17 +390,36 @@ function onDelete(id) {
         </NGridItem>
         <NGridItem span="24 m:8">
           <NFormItem label="单价（元/克）">
-            <NInputNumber v-model:value="form.price" :min="0.01" :precision="2" class="full-width" />
+            <NInputNumber
+              v-model:value="form.price"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              @update:value="onFormPriceChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
-          <NFormItem label="克数 count">
-            <NInputNumber v-model:value="form.count" :min="0.01" :precision="2" class="full-width" />
+          <NFormItem label="克数 count" required>
+            <NInputNumber
+              v-model:value="form.count"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              @update:value="onFormCountChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
           <NFormItem label="回笼金额 pop_amount">
-            <NInputNumber v-model:value="form.pop_amount" :min="0.01" :precision="2" class="full-width" />
+            <NInputNumber
+              v-model:value="form.pop_amount"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              placeholder="与单价二选一填写，自动互算"
+              @update:value="onFormPopChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
@@ -432,18 +503,32 @@ function onDelete(id) {
         <NInput v-model:value="editForm.mark" />
       </NFormItem>
       <NFormItem label="单价（元/克）">
-        <NInputNumber v-model:value="editForm.price" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber
+          v-model:value="editForm.price"
+          :min="0.01"
+          :precision="2"
+          class="full-width"
+          @update:value="onEditPriceChange"
+        />
       </NFormItem>
-      <NFormItem label="克数 count">
+      <NFormItem label="克数 count" required>
         <NInputNumber
           v-model:value="editForm.count"
           :min="editForm.allocated_count || 0.01"
           :precision="2"
           class="full-width"
+          @update:value="onEditCountChange"
         />
       </NFormItem>
       <NFormItem label="回笼金额 pop_amount">
-        <NInputNumber v-model:value="editForm.pop_amount" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber
+          v-model:value="editForm.pop_amount"
+          :min="0.01"
+          :precision="2"
+          class="full-width"
+          placeholder="与单价二选一填写，自动互算"
+          @update:value="onEditPopChange"
+        />
       </NFormItem>
       <NFormItem label="卖出日期">
         <NDatePicker

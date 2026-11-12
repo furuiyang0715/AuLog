@@ -8,8 +8,51 @@ export function round2(value) {
 export function amountFromPriceCount(price, count) {
   const priceCents = Math.round(round2(price) * 100);
   const countHundredths = Math.round(round2(count) * 100);
+  if (countHundredths <= 0) return null;
   const amountCents = Math.round((priceCents * countHundredths) / 100);
   return amountCents / 100;
+}
+
+/** 由总价、克数反算单价（保留两位） */
+export function priceFromAmountCount(amount, count) {
+  const c = round2(count);
+  const a = round2(amount);
+  if (c <= 0 || a <= 0) return null;
+  const countHundredths = Math.round(c * 100);
+  const amountCents = Math.round(a * 100);
+  if (countHundredths <= 0) return null;
+  return Math.round((amountCents / countHundredths) * 100) / 100;
+}
+
+/**
+ * @param {Record<string, unknown>} state 含 price、count 与 amountKey
+ * @param {'price' | 'amount' | 'count'} changed 用户刚改动的字段
+ * @param {string} amountKey 总价字段名，默认 amount
+ */
+export function syncTradeAmounts(state, changed, amountKey = "amount") {
+  const count = Number(state.count);
+  if (!Number.isFinite(count) || count <= 0) return;
+
+  const price = Number(state.price);
+  const total = Number(state[amountKey]);
+  const hasPrice = Number.isFinite(price) && price > 0;
+  const hasTotal = Number.isFinite(total) && total > 0;
+
+  if (changed === "price" && hasPrice) {
+    state[amountKey] = amountFromPriceCount(price, count);
+    return;
+  }
+  if (changed === "amount" && hasTotal) {
+    state.price = priceFromAmountCount(total, count);
+    return;
+  }
+  if (changed === "count") {
+    if (hasPrice) {
+      state[amountKey] = amountFromPriceCount(price, count);
+    } else if (hasTotal) {
+      state.price = priceFromAmountCount(total, count);
+    }
+  }
 }
 
 /**

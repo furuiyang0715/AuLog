@@ -19,7 +19,11 @@ import {
   useMessage,
 } from "naive-ui";
 import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
-import { firstValidationError, validatePriceCountAmount } from "../../utils/tradeAmount";
+import {
+  firstValidationError,
+  syncTradeAmounts,
+  validatePriceCountAmount,
+} from "../../utils/tradeAmount";
 import { usePagination } from "../../composables/usePagination";
 import { useGoldPrice } from "../../composables/useGoldPrice";
 
@@ -289,11 +293,58 @@ const editForm = ref({
   allocated_count: 0,
 });
 
+function hasPositive(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0;
+}
+
+function onFormPriceChange() {
+  syncTradeAmounts(form.value, "price");
+}
+
+function onFormCountChange() {
+  syncTradeAmounts(form.value, "count");
+}
+
+function onFormAmountChange() {
+  syncTradeAmounts(form.value, "amount");
+}
+
+function onEditPriceChange() {
+  syncTradeAmounts(editForm.value, "price");
+}
+
+function onEditCountChange() {
+  syncTradeAmounts(editForm.value, "count");
+}
+
+function onEditAmountChange() {
+  syncTradeAmounts(editForm.value, "amount");
+}
+
+function ensureIngTradeFields(state) {
+  if (!hasPositive(state.count)) {
+    message.warning("请填写克数");
+    return false;
+  }
+  if (!hasPositive(state.price) && !hasPositive(state.amount)) {
+    message.warning("请填写单价或总价");
+    return false;
+  }
+  if (hasPositive(state.price)) {
+    syncTradeAmounts(state, "price");
+  } else {
+    syncTradeAmounts(state, "amount");
+  }
+  return true;
+}
+
 async function submit() {
   if (!form.value.date) {
     message.warning("请填写日期");
     return;
   }
+  if (!ensureIngTradeFields(form.value)) return;
   const check = validatePriceCountAmount({
     price: form.value.price,
     count: form.value.count,
@@ -363,6 +414,7 @@ async function submitEdit() {
     message.warning("请填写日期");
     return;
   }
+  if (!ensureIngTradeFields(editForm.value)) return;
   const check = validatePriceCountAmount({
     price: editForm.value.price,
     count: editForm.value.count,
@@ -466,17 +518,36 @@ function onDelete(id) {
         </NGridItem>
         <NGridItem span="24 m:8">
           <NFormItem label="单价 price">
-            <NInputNumber v-model:value="form.price" :min="0.01" :precision="2" class="full-width" />
+            <NInputNumber
+              v-model:value="form.price"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              @update:value="onFormPriceChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
-          <NFormItem label="克数 count">
-            <NInputNumber v-model:value="form.count" :min="0.01" :precision="2" class="full-width" />
+          <NFormItem label="克数 count" required>
+            <NInputNumber
+              v-model:value="form.count"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              @update:value="onFormCountChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24 m:8">
           <NFormItem label="总价 amount">
-            <NInputNumber v-model:value="form.amount" :min="0" :precision="2" class="full-width" placeholder="留空自动计算" />
+            <NInputNumber
+              v-model:value="form.amount"
+              :min="0.01"
+              :precision="2"
+              class="full-width"
+              placeholder="与单价二选一填写，自动互算"
+              @update:value="onFormAmountChange"
+            />
           </NFormItem>
         </NGridItem>
         <NGridItem span="24">
@@ -545,18 +616,32 @@ function onDelete(id) {
         <NInput v-model:value="editForm.mark" />
       </NFormItem>
       <NFormItem label="单价 price">
-        <NInputNumber v-model:value="editForm.price" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber
+          v-model:value="editForm.price"
+          :min="0.01"
+          :precision="2"
+          class="full-width"
+          @update:value="onEditPriceChange"
+        />
       </NFormItem>
-      <NFormItem label="克数 count">
+      <NFormItem label="克数 count" required>
         <NInputNumber
           v-model:value="editForm.count"
           :min="editForm.allocated_count || 0.01"
           :precision="2"
           class="full-width"
+          @update:value="onEditCountChange"
         />
       </NFormItem>
       <NFormItem label="总价 amount">
-        <NInputNumber v-model:value="editForm.amount" :min="0" :precision="2" class="full-width" placeholder="留空按单价×克数" />
+        <NInputNumber
+          v-model:value="editForm.amount"
+          :min="0.01"
+          :precision="2"
+          class="full-width"
+          placeholder="与单价二选一填写，自动互算"
+          @update:value="onEditAmountChange"
+        />
       </NFormItem>
       <div class="modal-actions">
         <NButton @click="showEdit = false">取消</NButton>
