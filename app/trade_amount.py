@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
+
 from fastapi import HTTPException
+
+_TWOPLACES = Decimal("0.01")
 
 
 def round2(value: float) -> float:
-    return round(float(value), 2)
+    return float(Decimal(str(value)).quantize(_TWOPLACES, rounding=ROUND_HALF_UP))
+
+
+def amount_from_price_count(price: float, count: float) -> float:
+    """总价 = round(单价×克数, 2)，四舍五入，避免 float 与银行家舍入差异。"""
+    p = Decimal(str(round2(price)))
+    c = Decimal(str(round2(count)))
+    return float((p * c).quantize(_TWOPLACES, rounding=ROUND_HALF_UP))
 
 
 def resolve_ing_amount(price: float, count: float, amount: float | None) -> float:
@@ -12,7 +23,7 @@ def resolve_ing_amount(price: float, count: float, amount: float | None) -> floa
     count_r = round2(count)
     if price_r <= 0 or count_r <= 0:
         raise HTTPException(status_code=400, detail="单价与克数须大于 0")
-    expected = round2(price_r * count_r)
+    expected = amount_from_price_count(price_r, count_r)
     if amount is None:
         return expected
     amount_r = round2(amount)
@@ -31,8 +42,8 @@ def validate_t_pop_amount(count: float, pop_amount: float) -> None:
     pop_r = round2(pop_amount)
     if count_r <= 0 or pop_r <= 0:
         raise HTTPException(status_code=400, detail="克数与回笼金额须大于 0")
-    unit = round2(pop_r / count_r)
-    expected_pop = round2(count_r * unit)
+    unit = round2(float(Decimal(str(pop_r)) / Decimal(str(count_r))))
+    expected_pop = amount_from_price_count(unit, count_r)
     if abs(expected_pop - pop_r) > 0.009:
         raise HTTPException(
             status_code=400,

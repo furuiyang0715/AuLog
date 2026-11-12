@@ -1,5 +1,15 @@
 export function round2(value) {
-  return Math.round(Number(value) * 100) / 100;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 100) / 100;
+}
+
+/** 与后端 amount_from_price_count 一致：先保留两位单价/克数，再用整数运算求总价 */
+export function amountFromPriceCount(price, count) {
+  const priceCents = Math.round(round2(price) * 100);
+  const countHundredths = Math.round(round2(count) * 100);
+  const amountCents = Math.round((priceCents * countHundredths) / 100);
+  return amountCents / 100;
 }
 
 /**
@@ -14,7 +24,7 @@ export function validatePriceCountAmount({ price, count, amount, requireTotal = 
   if (!Number.isFinite(p) || p <= 0) errors.push("单价须大于 0");
   if (errors.length) return { ok: false, errors, expectedAmount: null };
 
-  const expected = round2(p * c);
+  const expected = amountFromPriceCount(p, c);
   const amountMissing = amount == null || amount === "";
   if (amountMissing) {
     if (requireTotal) {
