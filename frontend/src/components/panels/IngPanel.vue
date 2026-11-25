@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, inject, ref, watch } from "vue";
+import { computed, h, inject, onMounted, ref, watch } from "vue";
 import {
   NButton,
   NCard,
@@ -28,6 +28,7 @@ import {
 } from "../../utils/tradeAmount";
 import { usePagination } from "../../composables/usePagination";
 import { useGoldPrice } from "../../composables/useGoldPrice";
+import { ingRecordRowTint, rowTintClassName } from "../../utils/recordRowTint";
 
 const ledger = inject("ledger");
 const message = useMessage();
@@ -480,6 +481,14 @@ async function submitSelled() {
   }
 }
 
+function ingRowClassName(row) {
+  return rowTintClassName(ingRecordRowTint(row, currentGold.value));
+}
+
+onMounted(() => {
+  if (currentGold.value == null) loadGoldPrice();
+});
+
 function onDelete(id) {
   dialog.warning({
     title: "确认删除",
@@ -589,6 +598,12 @@ function onDelete(id) {
         </span>
       </div>
     </template>
+    <p class="hint-text row-tint-legend">
+      <span class="legend-swatch row-tint-closed-sample" />已闭合
+      <span class="legend-swatch row-tint-profit-sample" />现价浮盈（含持平）
+      <span class="legend-swatch row-tint-loss-sample" />现价浮亏
+      <template v-if="currentGold != null"> · 现价 {{ fmt(currentGold) }} 元/克</template>
+    </p>
     <NDataTable
       :columns="columns"
       :data="tableRecords"
@@ -596,6 +611,7 @@ function onDelete(id) {
       :bordered="false"
       size="small"
       :pagination="pagination"
+      :row-class-name="ingRowClassName"
       @update:sorter="resetPage"
     />
   </NCard>
@@ -856,4 +872,5 @@ function onDelete(id) {
   margin: 0 0 0.35rem;
   color: #c9cdd4;
 }
+
 </style>
