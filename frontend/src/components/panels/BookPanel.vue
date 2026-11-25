@@ -51,7 +51,7 @@ function fmtGram(value) {
   if (value == null || value === "") return "—";
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
-  return n.toFixed(3);
+  return n.toFixed(4);
 }
 
 function computePreciousAmount(pm) {
@@ -559,10 +559,10 @@ onMounted(async () => {
                 <NFormItem label="金持仓克重">
                   <NInputNumber
                     v-model:value="formPreciousMetals.gold_grams"
-                    :precision="3"
+                    :precision="4"
                     :min="0"
                     class="full-width"
-                    placeholder="0.000"
+                    placeholder="0.0000"
                   />
                 </NFormItem>
               </NGridItem>
@@ -581,10 +581,10 @@ onMounted(async () => {
                 <NFormItem label="银持仓克重">
                   <NInputNumber
                     v-model:value="formPreciousMetals.silver_grams"
-                    :precision="3"
+                    :precision="4"
                     :min="0"
                     class="full-width"
-                    placeholder="0.000"
+                    placeholder="0.0000"
                   />
                 </NFormItem>
               </NGridItem>

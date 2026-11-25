@@ -1,7 +1,7 @@
 <script setup>
 import { computed, h, inject } from "vue";
 import { NButton, NCard, NDataTable, useDialog, useMessage } from "naive-ui";
-import { fmt, formatDateDisplay, gainType } from "../../utils/format";
+import { fmt, fmtQty, formatDateDisplay, gainType } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -17,10 +17,10 @@ const selledGainTotal = computed(() =>
 const columns = [
   { title: "日期", key: "date", render: (r) => formatDateDisplay(r.date) },
   { title: "备注", key: "mark", render: (r) => r.mark || "—" },
-  { title: "买入价", key: "buy_price", render: (r) => fmt(r.buy_price) },
-  { title: "克数", key: "count", render: (r) => fmt(r.count) },
+  { title: "买入价", key: "buy_price", render: (r) => fmtQty(r.buy_price) },
+  { title: "克数", key: "count", render: (r) => fmtQty(r.count) },
   { title: "买入额", key: "buy_amount", render: (r) => fmt(r.buy_amount) },
-  { title: "卖出价", key: "sell_price", render: (r) => fmt(r.sell_price) },
+  { title: "卖出价", key: "sell_price", render: (r) => fmtQty(r.sell_price) },
   { title: "卖出额", key: "sell_amount", render: (r) => fmt(r.sell_amount) },
   {
     title: "获利",

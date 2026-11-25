@@ -17,7 +17,9 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
+import { fmt, fmtQty, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateTimeString, compareLegacyDate } from "../../utils/format";
+
+const COUNT_EPS = 1e-6;
 import {
   firstValidationError,
   syncTradeAmounts,
@@ -227,20 +229,20 @@ const columns = [
     defaultSortOrder: "descend",
     render: (r) => formatDateDisplay(r.sold_at),
   },
-  { title: "克数", key: "count", render: (r) => fmt(r.count) },
+  { title: "克数", key: "count", render: (r) => fmtQty(r.count) },
   { title: "回笼", key: "pop_amount", render: (r) => fmt(r.pop_amount) },
   {
     title: "卖价",
     key: "price",
     sorter: (a, b) => Number(a.price) - Number(b.price),
-    render: (r) => fmt(r.price),
+    render: (r) => fmtQty(r.price),
   },
   { title: "买回成本", key: "push_amount", render: (r) => fmt(r.push_amount) },
   { title: "套利 gain", key: "gain", render: renderGain },
   {
     title: "已配/剩余",
     key: "allocated",
-    render: (r) => `${fmt(r.allocated_count)} / ${fmt(r.remaining_count)}`,
+    render: (r) => `${fmtQty(r.allocated_count)} / ${fmtQty(r.remaining_count)}`,
   },
   { title: "状态", key: "status", render: (r) => hStatus(r.status) },
   { title: "操作", key: "actions", width: 120, render: actionButtons },
@@ -343,7 +345,7 @@ async function submitEdit() {
     message.warning(firstValidationError(check));
     return;
   }
-  if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
+  if (editForm.value.count + COUNT_EPS < editForm.value.allocated_count) {
     message.warning(`克数不能小于已配对克数 ${fmt(editForm.value.allocated_count)} 克`);
     return;
   }
@@ -392,8 +394,8 @@ function onDelete(id) {
           <NFormItem label="单价（元/克）">
             <NInputNumber
               v-model:value="form.price"
-              :min="0.01"
-              :precision="2"
+              :min="0.0001"
+              :precision="4"
               class="full-width"
               @update:value="onFormPriceChange"
             />
@@ -403,8 +405,8 @@ function onDelete(id) {
           <NFormItem label="克数 count" required>
             <NInputNumber
               v-model:value="form.count"
-              :min="0.01"
-              :precision="2"
+              :min="0.0001"
+              :precision="4"
               class="full-width"
               @update:value="onFormCountChange"
             />
@@ -459,7 +461,7 @@ function onDelete(id) {
         <div class="summary-label">当前可买入总克数</div>
         <div class="hint-text">所有未闭环倒 T 的剩余克数之和（待买回）</div>
       </div>
-      <div class="summary-value summary-count">{{ fmt(buybackRemainingTotal) }}</div>
+      <div class="summary-value summary-count">{{ fmtQty(buybackRemainingTotal) }}</div>
     </div>
   </NCard>
 
@@ -505,8 +507,8 @@ function onDelete(id) {
       <NFormItem label="单价（元/克）">
         <NInputNumber
           v-model:value="editForm.price"
-          :min="0.01"
-          :precision="2"
+          :min="0.0001"
+          :precision="4"
           class="full-width"
           @update:value="onEditPriceChange"
         />
@@ -514,8 +516,8 @@ function onDelete(id) {
       <NFormItem label="克数 count" required>
         <NInputNumber
           v-model:value="editForm.count"
-          :min="editForm.allocated_count || 0.01"
-          :precision="2"
+          :min="editForm.allocated_count || 0.0001"
+          :precision="4"
           class="full-width"
           @update:value="onEditCountChange"
         />

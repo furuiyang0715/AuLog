@@ -2,7 +2,7 @@
 import { computed, inject, onMounted, ref } from "vue";
 import { NButton, NCard, NSpin, useMessage } from "naive-ui";
 import { api } from "../../api/client";
-import { fmt, gainType } from "../../utils/format";
+import { fmt, fmtQty, gainType } from "../../utils/format";
 import GoldTrendModal from "../GoldTrendModal.vue";
 
 const ledger = inject("ledger");
@@ -297,19 +297,19 @@ onMounted(() => {
       <div class="stat-item summary-card">
         <div class="summary-label">未结卖出均价</div>
         <div class="hint-text">
-          倒 T 未闭合 · 剩余 {{ fmt(unsettledSellTotal) }} 克
+          倒 T 未闭合 · 剩余 {{ fmtQty(unsettledSellTotal) }} 克
         </div>
         <div class="summary-value summary-price">
-          {{ unsettledSellAvg == null ? "—" : fmt(unsettledSellAvg) }}
+          {{ unsettledSellAvg == null ? "—" : fmtQty(unsettledSellAvg) }}
         </div>
       </div>
       <div class="stat-item summary-card">
         <div class="summary-label">未结买入均价</div>
         <div class="hint-text">
-          进货未分完 · 剩余 {{ fmt(unsettledBuyTotal) }} 克
+          进货未分完 · 剩余 {{ fmtQty(unsettledBuyTotal) }} 克
         </div>
         <div class="summary-value summary-price">
-          {{ unsettledBuyAvg == null ? "—" : fmt(unsettledBuyAvg) }}
+          {{ unsettledBuyAvg == null ? "—" : fmtQty(unsettledBuyAvg) }}
         </div>
       </div>
       <div class="stat-item summary-card stat-item-balance">

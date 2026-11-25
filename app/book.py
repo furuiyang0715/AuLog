@@ -11,6 +11,7 @@ from pymongo.database import Database
 
 from app.auth import user_id
 from app.db import get_db
+from app.trade_amount import round4 as round_gram
 
 router = APIRouter(prefix="/api/book", tags=["book"])
 
@@ -120,10 +121,6 @@ def parse_amount(value: Any) -> float:
         raise HTTPException(status_code=400, detail="金额必须是数字") from exc
 
 
-def round3(value: float) -> float:
-    return round(float(value), 3)
-
-
 def parse_gram(value: Any, label: str) -> float:
     if value is None or value == "":
         raise HTTPException(status_code=400, detail=f"请填写{label}")
@@ -133,7 +130,7 @@ def parse_gram(value: Any, label: str) -> float:
         raise HTTPException(status_code=400, detail=f"{label}必须是数字") from exc
     if grams < 0:
         raise HTTPException(status_code=400, detail=f"{label}不能为负数")
-    return round3(grams)
+    return round_gram(grams)
 
 
 def parse_price(value: Any, label: str) -> float:
@@ -199,9 +196,9 @@ def enrich_snapshot(doc: dict[str, Any]) -> dict[str, Any]:
     raw_precious = item.get("precious_metals")
     if raw_precious:
         normalized_pm = {
-            "gold_grams": round3(raw_precious["gold_grams"]),
+            "gold_grams": round_gram(raw_precious["gold_grams"]),
             "gold_price": round2(raw_precious["gold_price"]),
-            "silver_grams": round3(raw_precious["silver_grams"]),
+            "silver_grams": round_gram(raw_precious["silver_grams"]),
             "silver_price": round2(raw_precious["silver_price"]),
         }
         item["precious_metals"] = {

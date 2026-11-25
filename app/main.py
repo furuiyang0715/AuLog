@@ -22,7 +22,14 @@ from app.book import router as book_router
 from app.work import router as work_router
 from app.db import get_db
 from app.gold_price import fetch_stats_gold_prices
-from app.trade_amount import resolve_ing_amount, validate_t_pop_amount
+from app.trade_amount import (
+    COUNT_EPS,
+    amount_from_price_count,
+    resolve_ing_amount,
+    round4,
+    round_money,
+    validate_t_pop_amount,
+)
 from cron.gold_history import get_range_history
 
 GOLD_HISTORY_LABELS = {"浙商黄金", "伦敦金"}
@@ -97,7 +104,8 @@ def serialize(doc: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def round2(value: float) -> float:
-    return round(value, 2)
+    """金额类字段（元）两位小数。"""
+    return round_money(value)
 
 
 def _is_valid_date(value: str) -> bool:
@@ -142,14 +150,14 @@ def ing_allocated_count(ing_id: ObjectId, allocations: Collection) -> float:
     total = 0.0
     for row in allocations.find({"ing_id": ing_id}):
         total += row["count"]
-    return round2(total)
+    return round4(total)
 
 
 def t_allocated_count(t_id: ObjectId, allocations: Collection) -> float:
     total = 0.0
     for row in allocations.find({"target_type": "T_MATCH", "target_id": t_id}):
         total += row["count"]
-    return round2(total)
+    return round4(total)
 
 
 def t_push_amount(t_id: ObjectId, allocations: Collection) -> float:
@@ -166,9 +174,9 @@ def enrich_t(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
     allocated = t_allocated_count(doc["_id"], allocations)
     push = t_push_amount(doc["_id"], allocations)
 
-    item["price"] = round2(pop_amount / count) if count else 0
+    item["price"] = round4(pop_amount / count) if count else 0
     item["allocated_count"] = allocated
-    item["remaining_count"] = round2(max(count - allocated, 0))
+    item["remaining_count"] = round4(max(count - allocated, 0))
     item["push_amount"] = push if allocated > 0 else None
     if allocated > 0:
         matched_pop = round2(allocated * item["price"])
@@ -178,7 +186,7 @@ def enrich_t(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
 
     if allocated <= 0:
         item["status"] = "OPEN"
-    elif allocated + 1e-9 < count:
+    elif allocated + COUNT_EPS < count:
         item["status"] = "PARTIAL"
     else:
         item["status"] = "CLOSED"
@@ -233,7 +241,7 @@ def enrich_ing(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
     item = serialize(doc) or {}
     count = float(item["count"])
     allocated = ing_allocated_count(doc["_id"], allocations)
-    to_t = round2(
+    to_t = round4(
         sum(
             row["count"]
             for row in allocations.find(
@@ -241,7 +249,7 @@ def enrich_ing(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
             )
         )
     )
-    to_selled = round2(
+    to_selled = round4(
         sum(
             row["count"]
             for row in allocations.find(
@@ -251,13 +259,13 @@ def enrich_ing(doc: dict[str, Any], allocations: Collection) -> dict[str, Any]:
     )
 
     item["allocated_count"] = allocated
-    item["remaining_count"] = round2(max(count - allocated, 0))
+    item["remaining_count"] = round4(max(count - allocated, 0))
     item["allocated_to_t"] = to_t
     item["allocated_to_selled"] = to_selled
     item["is_change"] = to_t > 0
     if allocated <= 0:
         item["allocation_status"] = "UNALLOCATED"
-    elif allocated + 1e-9 < count:
+    elif allocated + COUNT_EPS < count:
         item["allocation_status"] = "PARTIAL"
     else:
         item["allocation_status"] = "FULLY_ALLOCATED"
@@ -270,8 +278,8 @@ def enrich_selled(doc: dict[str, Any]) -> dict[str, Any]:
     sell_amount = float(item["sell_amount"])
     count = float(item["count"])
     item["gain"] = round2(sell_amount - buy_amount)
-    item["buy_price"] = round2(buy_amount / count) if count else 0
-    item["sell_price"] = round2(sell_amount / count) if count else 0
+    item["buy_price"] = round4(buy_amount / count) if count else 0
+    item["sell_price"] = round4(sell_amount / count) if count else 0
     return item
 
 
@@ -402,8 +410,8 @@ def list_t_records(uid: ObjectId = Depends(user_id)):
 @app.post("/api/t-records", status_code=201)
 def create_t_record(body: TCreate, uid: ObjectId = Depends(user_id)):
     db = get_db()
-    count = round2(body.count)
-    pop_amount = round2(body.pop_amount)
+    count = round4(body.count)
+    pop_amount = round_money(body.pop_amount)
     validate_t_pop_amount(count, pop_amount)
     doc = {
         "user_id": uid,
@@ -424,11 +432,11 @@ def update_t_record(record_id: str, body: TCreate, uid: ObjectId = Depends(user_
     doc = get_t_or_404(record_id, db.t_records, uid)
     allocations = db.ing_allocations
     allocated = t_allocated_count(doc["_id"], allocations)
-    new_count = round2(body.count)
-    new_pop = round2(body.pop_amount)
+    new_count = round4(body.count)
+    new_pop = round_money(body.pop_amount)
     validate_t_pop_amount(new_count, new_pop)
 
-    if new_count + 1e-9 < allocated:
+    if new_count + COUNT_EPS < allocated:
         raise HTTPException(
             status_code=400,
             detail=f"克数不能小于已配对克数 {allocated} 克",
@@ -485,8 +493,8 @@ def create_ing_record(body: IngCreate, uid: ObjectId = Depends(user_id)):
         "user_id": uid,
         "date": body.date.strip(),
         "mark": body.mark.strip(),
-        "price": round2(body.price),
-        "count": round2(body.count),
+        "price": round4(body.price),
+        "count": round4(body.count),
         "amount": amount,
         "created_at": datetime.utcnow(),
     }
@@ -501,10 +509,10 @@ def update_ing_record(record_id: str, body: IngCreate, uid: ObjectId = Depends(u
     doc = get_ing_or_404(record_id, db.ing_records, uid)
     allocations = db.ing_allocations
     allocated = ing_allocated_count(doc["_id"], allocations)
-    new_count = round2(body.count)
-    new_price = round2(body.price)
+    new_count = round4(body.count)
+    new_price = round4(body.price)
 
-    if new_count + 1e-9 < allocated:
+    if new_count + COUNT_EPS < allocated:
         raise HTTPException(
             status_code=400,
             detail=f"克数不能小于已分配克数 {allocated} 克",
@@ -522,7 +530,7 @@ def update_ing_record(record_id: str, body: IngCreate, uid: ObjectId = Depends(u
     db.ing_records.update_one({"_id": doc["_id"], "user_id": uid}, {"$set": update})
 
     for alloc in allocations.find({"user_id": uid, "ing_id": doc["_id"], "target_type": "T_MATCH"}):
-        new_amount = round2(float(alloc["count"]) * new_price)
+        new_amount = amount_from_price_count(new_price, float(alloc["count"]))
         allocations.update_one({"_id": alloc["_id"]}, {"$set": {"amount": new_amount}})
 
     doc.update(update)
@@ -597,33 +605,34 @@ def allocate_to_t(body: TMatchAllocation, uid: ObjectId = Depends(user_id)):
     t_doc = get_t_or_404(body.t_id, db.t_records, uid)
     allocations = db.ing_allocations
 
-    ing_remaining = round2(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
-    if body.count > ing_remaining + 1e-9:
+    ing_remaining = round4(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
+    match_count = round4(body.count)
+    if match_count > ing_remaining + COUNT_EPS:
         raise HTTPException(status_code=400, detail=f"进货剩余克数不足，仅剩 {ing_remaining} 克")
 
-    t_remaining = round2(float(t_doc["count"]) - t_allocated_count(t_doc["_id"], allocations))
-    if body.count > t_remaining + 1e-9:
+    t_remaining = round4(float(t_doc["count"]) - t_allocated_count(t_doc["_id"], allocations))
+    if match_count > t_remaining + COUNT_EPS:
         raise HTTPException(status_code=400, detail=f"倒T 剩余可配对克数不足，仅剩 {t_remaining} 克")
 
     t_count = float(t_doc["count"])
-    t_sell_price = float(t_doc["pop_amount"]) / t_count if t_count else 0
-    ing_buy_price = float(ing["price"])
-    if t_sell_price + 1e-9 < ing_buy_price:
+    t_sell_price = round4(float(t_doc["pop_amount"]) / t_count) if t_count else 0
+    ing_buy_price = round4(float(ing["price"]))
+    if t_sell_price + COUNT_EPS < ing_buy_price:
         raise HTTPException(
             status_code=400,
             detail=(
-                f"倒T 卖价 {round2(t_sell_price)} 低于进货价 {round2(ing_buy_price)}，"
+                f"倒T 卖价 {t_sell_price} 低于进货价 {ing_buy_price}，"
                 "不接受亏损配对"
             ),
         )
 
-    amount = round2(body.count * ing_buy_price)
+    amount = amount_from_price_count(ing_buy_price, match_count)
     alloc = {
         "user_id": uid,
         "ing_id": ing["_id"],
         "target_type": "T_MATCH",
         "target_id": t_doc["_id"],
-        "count": round2(body.count),
+        "count": match_count,
         "amount": amount,
         "created_at": datetime.utcnow(),
     }
@@ -643,22 +652,24 @@ def allocate_to_selled(body: SelledAllocation, uid: ObjectId = Depends(user_id))
     ing = get_ing_or_404(body.ing_id, db.ing_records, uid)
     allocations = db.ing_allocations
 
-    ing_remaining = round2(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
-    if body.count > ing_remaining + 1e-9:
+    ing_remaining = round4(float(ing["count"]) - ing_allocated_count(ing["_id"], allocations))
+    sell_count = round4(body.count)
+    if sell_count > ing_remaining + COUNT_EPS:
         raise HTTPException(status_code=400, detail=f"进货剩余克数不足，仅剩 {ing_remaining} 克")
 
-    buy_price = float(ing["price"])
-    buy_amount = round2(body.count * buy_price)
-    sell_amount = round2(body.count * body.sell_price)
+    buy_price = round4(float(ing["price"]))
+    sell_price = round4(body.sell_price)
+    buy_amount = amount_from_price_count(buy_price, sell_count)
+    sell_amount = amount_from_price_count(sell_price, sell_count)
 
     selled_doc = {
         "user_id": uid,
         "date": body.date.strip(),
         "mark": body.mark.strip() or ing.get("mark", ""),
-        "buy_price": round2(buy_price),
-        "count": round2(body.count),
+        "buy_price": buy_price,
+        "count": sell_count,
         "buy_amount": buy_amount,
-        "sell_price": round2(body.sell_price),
+        "sell_price": sell_price,
         "sell_amount": sell_amount,
         "created_at": datetime.utcnow(),
     }
@@ -670,7 +681,7 @@ def allocate_to_selled(body: SelledAllocation, uid: ObjectId = Depends(user_id))
         "ing_id": ing["_id"],
         "target_type": "SELLED",
         "target_id": selled_doc["_id"],
-        "count": round2(body.count),
+        "count": sell_count,
         "amount": buy_amount,
         "created_at": datetime.utcnow(),
     }

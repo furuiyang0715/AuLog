@@ -1,7 +1,7 @@
 <script setup>
 import { h, inject } from "vue";
 import { NButton, NCard, NDataTable, useDialog, useMessage } from "naive-ui";
-import { fmt } from "../../utils/format";
+import { fmt, fmtQty } from "../../utils/format";
 import { usePagination } from "../../composables/usePagination";
 
 const ledger = inject("ledger");
@@ -26,7 +26,7 @@ const columns = [
     key: "target_id",
     render: (r) => ledger.targetMark(r),
   },
-  { title: "克数", key: "count", render: (r) => fmt(r.count) },
+  { title: "克数", key: "count", render: (r) => fmtQty(r.count) },
   { title: "成本", key: "amount", render: (r) => fmt(r.amount) },
   {
     title: "操作",

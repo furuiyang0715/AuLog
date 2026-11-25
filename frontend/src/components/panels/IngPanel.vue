@@ -18,7 +18,9 @@ import {
   useDialog,
   useMessage,
 } from "naive-ui";
-import { fmt, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
+import { fmt, fmtQty, formatDateDisplay, gainType, parseLegacyDate, statusMap, toDateString, toDateTimeString, compareLegacyDate } from "../../utils/format";
+
+const COUNT_EPS = 1e-6;
 import {
   firstValidationError,
   syncTradeAmounts,
@@ -188,7 +190,7 @@ const tOptionsForIng = (ing) => {
   return ledger.tRecords.value
     .filter((t) => t.remaining_count > 0 && Number(t.price) + 1e-9 >= buyPrice)
     .map((t) => ({
-      label: `${t.mark || "无备注"} · 剩余 ${fmt(t.remaining_count)} 克 · 卖价 ${fmt(t.price)}`,
+      label: `${t.mark || "无备注"} · 剩余 ${fmtQty(t.remaining_count)} 克 · 卖价 ${fmtQty(t.price)}`,
       value: t.id,
     }));
 };
@@ -233,16 +235,16 @@ const columns = [
     title: "单价",
     key: "price",
     sorter: (a, b) => Number(a.price) - Number(b.price),
-    render: (r) => fmt(r.price),
+    render: (r) => fmtQty(r.price),
   },
-  { title: "克数", key: "count", render: (r) => fmt(r.count) },
+  { title: "克数", key: "count", render: (r) => fmtQty(r.count) },
   { title: "总价", key: "amount", render: (r) => fmt(r.amount) },
   {
     title: "已配/剩余",
     key: "allocated",
-    render: (r) => `${fmt(r.allocated_count)} / ${fmt(r.remaining_count)}`,
+    render: (r) => `${fmtQty(r.allocated_count)} / ${fmtQty(r.remaining_count)}`,
   },
-  { title: "配倒T", key: "allocated_to_t", render: (r) => fmt(r.allocated_to_t) },
+  { title: "配倒T", key: "allocated_to_t", render: (r) => fmtQty(r.allocated_to_t) },
   { title: "已消利", key: "is_change", render: (r) => (r.is_change ? "✓" : "—") },
   { title: "状态", key: "allocation_status", render: (r) => hStatus(r.allocation_status) },
   {
@@ -425,7 +427,7 @@ async function submitEdit() {
     message.warning(firstValidationError(check));
     return;
   }
-  if (editForm.value.count + 1e-9 < editForm.value.allocated_count) {
+  if (editForm.value.count + COUNT_EPS < editForm.value.allocated_count) {
     message.warning(`克数不能小于已分配克数 ${fmt(editForm.value.allocated_count)} 克`);
     return;
   }
@@ -520,8 +522,8 @@ function onDelete(id) {
           <NFormItem label="单价 price">
             <NInputNumber
               v-model:value="form.price"
-              :min="0.01"
-              :precision="2"
+              :min="0.0001"
+              :precision="4"
               class="full-width"
               @update:value="onFormPriceChange"
             />
@@ -531,8 +533,8 @@ function onDelete(id) {
           <NFormItem label="克数 count" required>
             <NInputNumber
               v-model:value="form.count"
-              :min="0.01"
-              :precision="2"
+              :min="0.0001"
+              :precision="4"
               class="full-width"
               @update:value="onFormCountChange"
             />
@@ -563,7 +565,7 @@ function onDelete(id) {
         <div class="summary-label">当前需闭合总克数</div>
         <div class="hint-text">进货未分完的剩余克数之和（未分配 + 部分分配）</div>
       </div>
-      <div class="summary-value summary-count">{{ fmt(ingUnclosedTotal) }}</div>
+      <div class="summary-value summary-count">{{ fmtQty(ingUnclosedTotal) }}</div>
     </div>
   </NCard>
 
@@ -618,8 +620,8 @@ function onDelete(id) {
       <NFormItem label="单价 price">
         <NInputNumber
           v-model:value="editForm.price"
-          :min="0.01"
-          :precision="2"
+          :min="0.0001"
+          :precision="4"
           class="full-width"
           @update:value="onEditPriceChange"
         />
@@ -627,8 +629,8 @@ function onDelete(id) {
       <NFormItem label="克数 count" required>
         <NInputNumber
           v-model:value="editForm.count"
-          :min="editForm.allocated_count || 0.01"
-          :precision="2"
+          :min="editForm.allocated_count || 0.0001"
+          :precision="4"
           class="full-width"
           @update:value="onEditCountChange"
         />
@@ -661,9 +663,9 @@ function onDelete(id) {
       <NFormItem label="配对克数">
         <NInputNumber
           v-model:value="matchForm.count"
-          :min="0.01"
+          :min="0.0001"
           :max="matchCountMax ?? undefined"
-          :precision="2"
+          :precision="4"
           class="full-width"
         />
       </NFormItem>
@@ -686,10 +688,10 @@ function onDelete(id) {
         <NInput v-model:value="selledForm.mark" />
       </NFormItem>
       <NFormItem label="卖出克数">
-        <NInputNumber v-model:value="selledForm.count" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber v-model:value="selledForm.count" :min="0.0001" :precision="4" class="full-width" />
       </NFormItem>
       <NFormItem label="卖出单价">
-        <NInputNumber v-model:value="selledForm.sell_price" :min="0.01" :precision="2" class="full-width" />
+        <NInputNumber v-model:value="selledForm.sell_price" :min="0.0001" :precision="4" class="full-width" />
       </NFormItem>
       <div class="modal-actions">
         <NButton @click="showSelled = false">取消</NButton>
